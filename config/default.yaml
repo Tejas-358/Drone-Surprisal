@@ -1,0 +1,42 @@
+# ============================================================
+# default.yaml — shared settings for EVERY script in this repo.
+#
+# Used by: src/utils/connection.py (URIs), src/utils/flight.py
+# (takeoff/land), and every experiment / sanity test.
+# Per-experiment files in config/experiments/ add to (or override)
+# these values.
+#
+# Rule: if a number affects a result, it lives in a config file,
+# not inside a Python script.
+# ============================================================
+
+# "sim" = CrazySim on this computer, "real" = real Crazyflies over radio.
+# This is the ONLY switch between simulation and hardware.
+mode: sim
+
+# --- Connection -------------------------------------------------
+# One URI per drone. Drone 0 is the first entry (called CF1 in prints).
+uris:
+  sim:
+    - udp://127.0.0.1:19850   # CF1
+    - udp://127.0.0.1:19851   # CF2
+    - udp://127.0.0.1:19852   # CF3
+  real:
+    # [FILL IN] your radio addresses, e.g. radio://0/80/2M/E7E7E7E7E1
+    - radio://0/80/2M/E7E7E7E7E1
+    - radio://0/80/2M/E7E7E7E7E2
+    - radio://0/80/2M/E7E7E7E7E3
+
+# Folder where CFLib stores the drone's parameter/log tables.
+cache_dir: ./cache
+
+# --- Flight -----------------------------------------------------
+height: 0.5            # m, hover altitude after takeoff
+takeoff_time: 2.0      # s, how long the takeoff manoeuvre takes
+land_time: 2.0         # s, how long the landing manoeuvre takes
+
+# --- Telemetry --------------------------------------------------
+log_period_ms: 100     # how often the drone sends its state (100 ms = 10 Hz)
+
+# --- Output -----------------------------------------------------
+log_dir: data/raw      # where CSV logs + JSON sidecars are written
