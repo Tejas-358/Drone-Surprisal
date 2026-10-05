@@ -15,10 +15,9 @@ Run from the repo root (CrazySim running, at least 1 drone):
 
 import time
 
-from cflib.crazyflie.log import LogConfig
-
 from src.utils.connection import load_config
 from src.utils.flight import fly_safely
+from src.utils import sensors
 
 
 WATCH_SECONDS = 6.0    # how long to print positions while hovering
@@ -36,49 +35,32 @@ def watch_position(drones, config):
     Called from: fly_safely(), after takeoff. Landing happens
     automatically when this function returns (or crashes).
     """
-    scf = drones[0]
-    position = {}   # filled in by the callback below
-
-    # Ask the drone to stream its estimated position.
-    # (This will move to src/utils/sensors.py in a later step.)
-    log_config = LogConfig(name="Position", period_in_ms=config["log_period_ms"])
-    log_config.add_variable("stateEstimate.x", "float")
-    log_config.add_variable("stateEstimate.y", "float")
-    log_config.add_variable("stateEstimate.z", "float")
-
-    # Called by CFLib in the background each time new data arrives.
-    def callback(timestamp, data, logconf):
-        position["x"] = data["stateEstimate.x"]
-        position["y"] = data["stateEstimate.y"]
-        position["z"] = data["stateEstimate.z"]
-
-    log_config.data_received_cb.add_callback(callback)
-    scf.cf.log.add_config(log_config)
-    log_config.start()
+    # states[0] is updated in the background with CF1's latest data.
+    states, log_configs = sensors.start_all(drones, config["log_period_ms"])
+    state = states[0]
 
     try:
+        sensors.wait_for_data(states)   # stop with an error if nothing arrives
         start_time = time.time()
 
         while time.time() - start_time < WATCH_SECONDS:
             t = time.time() - start_time
-            if position:
-                print(
-                    f"t={t:4.1f}s  x={position['x']:.3f}  "
-                    f"y={position['y']:.3f}  z={position['z']:.3f}"
-                )
-            else:
-                print(f"t={t:4.1f}s  waiting for telemetry...")
+            print(
+                f"t={t:4.1f}s  x={state['x']:.3f}  "
+                f"y={state['y']:.3f}  z={state['z']:.3f}"
+            )
             time.sleep(PRINT_PERIOD)
 
         # Simple verdict: is the drone near the height we asked for?
-        if position and abs(position["z"] - config["height"]) < 0.1:
-            print(f"PASS: hovering at z={position['z']:.3f} m "
+        if abs(state["z"] - config["height"]) < 0.1:
+            print(f"PASS: hovering at z={state['z']:.3f} m "
                   f"(target {config['height']} m).")
         else:
-            print("CHECK: no telemetry, or height is more than 0.1 m off target.")
+            print(f"CHECK: z={state['z']:.3f} m is more than 0.1 m "
+                  f"from the target {config['height']} m.")
 
     finally:
-        log_config.stop()
+        sensors.stop_all(log_configs)
 
 
 def main():
