@@ -1,5 +1,5 @@
 """
-repeat_test.py — sanity check: does ONE drone hover steadily, and is its
+hover_telemetry_test.py — sanity check: does ONE drone hover steadily, and is its
 position telemetry arriving while it flies?
 
 CF1 takes off, then prints its estimated x / y / z five times a second
@@ -10,7 +10,7 @@ When to use: after takeoff_test passes, to check that position data
 (which every experiment relies on) is sensible during flight.
 
 Run from the repo root (CrazySim running, at least 1 drone):
-    python -m src.tests.repeat_test
+    python -m src.tests.hover_telemetry_test
 """
 
 import time

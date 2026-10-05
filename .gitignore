@@ -1,0 +1,9 @@
+# Python bytecode (created automatically when scripts run)
+__pycache__/
+*.pyc
+
+# CFLib parameter/log table cache (re-created on connect)
+cache/
+
+# Virtual environments
+.venv/
