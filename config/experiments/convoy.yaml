@@ -1,0 +1,46 @@
+# ============================================================
+# convoy.yaml — settings for the leader–follower CONVOY scenario.
+#
+# Used by BOTH convoy experiments, so they always fly the exact same
+# scenario and differ only in the follower control law:
+#   E1  src/experiments/surprise_minimization_experiment.py  (surprise-gated)
+#   E2  src/experiments/convoy_baseline_experiment.py        (plain P-control)
+#
+# Loaded on top of config/default.yaml (height, URIs, etc. come from there).
+# Values below are copied from the original scripts
+# (legacy/wall_follow_experiment.py, legacy/surprise_minimization_experiment.py).
+# ============================================================
+
+# --- Scenario -----------------------------------------------------
+# Drones start in a line along x, leader in front:
+#   CF3 (-1.0) ---- CF2 (-0.5) ---- CF1 (0.0)  ---->  wall (x = 2.0)
+start_x: [0.0, -0.5, -1.0]   # m, starting x of CF1, CF2, CF3
+formation_time: 2.0          # s, time given to fly into the start line
+
+wall_x: 2.0              # m, position of the VIRTUAL wall (no real obstacle)
+wall_stop_distance: 0.5  # m, leader stops when it gets this close to the wall
+                         #    (so with these values it stops at x = 1.5)
+
+leader_speed: 0.15       # m/s, constant forward speed of CF1 until it stops
+
+# --- Follower control (shared by E1 and E2) -----------------------
+follow_distance: 0.5     # m, target gap between each drone and the one ahead
+follow_gain: 0.8         # P-gain: commanded speed = gain * spacing error
+max_follow_speed: 0.15   # m/s, follower speed limit (clamp)
+
+# --- Safety repulsion (shared by E1 and E2) -----------------------
+# If a follower gets closer than this to the drone ahead, it backs away
+# at max_follow_speed until the gap is safe again. This override is NOT
+# affected by surprise gating, so E1 can never "freeze" into a collision.
+safe_distance: 0.3       # m, [CONFIRM] must be < follow_distance
+
+# --- Surprise gating (E1 only; E2 ignores these) ------------------
+# Surprise of follower i:  U_i = 0.5 * ((v_ahead - v_i) / noise_scale)^2
+# Speed factor:            exp(-surprise_gain * U_i)
+noise_scale: 0.05        # N, in m/s. Small N = very sensitive (0.05 nearly
+                         # freezes the followers — see EXPERIMENTS.md)
+surprise_gain: 2.0
+
+# --- Timing -------------------------------------------------------
+duration: 25.0           # s, length of the controlled part of each run
+control_period: 0.1      # s, one control step every 0.1 s (= 10 Hz)
