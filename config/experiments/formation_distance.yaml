@@ -1,0 +1,29 @@
+# ============================================================
+# formation_distance.yaml — settings for E3, the formation-distance
+# experiment (src/experiments/formation_distance_experiment.py).
+#
+# Three drones in a line along x. Each step, every drone moves a small
+# amount "downhill" on the formation potential
+#     U = 0.5 * (S12^2 + S23^2),   S = (neighbour gap) - desired_distance
+# so the gaps converge to desired_distance (hypothesis H3).
+#
+# Loaded on top of config/default.yaml (height, URIs, etc. come from there).
+# Values below are copied from legacy/distance_controller.py.
+# ============================================================
+
+# --- Scenario -----------------------------------------------------
+# Starting x of CF1, CF2, CF3. Deliberately NOT at the target spacing
+# (gaps start at 0.3 m and 0.8 m) so the controller has something to
+# correct. (The legacy script started at 0.0, 0.5, 1.0 — already
+# converged — which made H3 trivially true.)
+start_x: [0.0, 0.3, 1.1]
+formation_time: 2.0       # s, time given to fly into the start line
+
+# --- Controller ---------------------------------------------------
+desired_distance: 0.5     # m, target gap between neighbours
+gain: 0.15                # step size of the gradient descent
+max_step: 0.03            # m, the most a drone may move in one step
+
+# --- Timing -------------------------------------------------------
+duration: 15.0            # s, length of the controlled part of each run
+control_period: 0.3       # s, one step every 0.3 s (~3.3 Hz)

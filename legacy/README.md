@@ -12,7 +12,7 @@ while the code is migrated into `src/`. Do not edit them.
 | `surprise_minimization_experiment.py` | E1 — not migrated yet |
 | `wall_follow_experiment.py` | E2 convoy baseline — not migrated yet |
 | `distance_controller.py` | E3 formation distance — not migrated yet |
-| `formation_test.py` | not migrated yet |
+| `formation_test.py` | not migrated — covered by E3's "fly to start line"; delete once E3 is confirmed |
 
 Their old CSV outputs are in `data/raw/legacy/`.
 
