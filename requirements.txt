@@ -1,0 +1,18 @@
+# Python packages this repo needs.
+# Install with:   pip install -r requirements.txt
+#
+# Versions are not pinned yet. Once the Linux sim machine is working,
+# run `pip freeze` there and copy the exact versions in here so every
+# run uses the same environment.
+
+# Crazyflie Python library — talks to the drones (sim over UDP, real over radio).
+# NOTE: CrazySim may ship its own copy of crazyflie-lib-python; if you
+# installed that one by following CrazySim's instructions, keep it and
+# skip this line.
+cflib
+
+# Reads the config/*.yaml files.
+pyyaml
+
+# Analysis packages (numpy, pandas, matplotlib) will be added when the
+# analysis/ scripts are written.

@@ -1,64 +1,55 @@
 # Drone-Surprisal
 
-Surprise-minimisation experiments for the Crazyflie nano quadrotor, run in the
-**CrazySim** software-in-the-loop (SITL) simulator and designed so the **same
-code runs on real Crazyflies**.
+Surprise-minimisation experiments for a three-drone Crazyflie **leader–follower
+convoy**, run in the **CrazySim** software-in-the-loop (SITL) simulator and
+designed so the **same code runs on real Crazyflies**.
 
 > **What is this project?** See **[EXPERIMENTS.md](EXPERIMENTS.md)** for the
-> research framework, hypotheses, and the detailed spec of every experiment.
+> research framework, hypotheses, definitions and the spec of every experiment.
 > This README covers how the repository is organised and how to run things.
 
 ---
 
 ## Repository structure
 
-The layout below is the **target structure**. The current repo has all scripts
-at the top level; moving them into this structure is step one (see *Migration*
-at the bottom). Keeping this structure is what makes results analysis-ready and
-the code portable to hardware.
+Items marked *(planned)* are specified but not written yet.
 
 ```
-drone-surprisal/
+Drone-Surprisal/
 ├── README.md                  # this file — how to run things
 ├── EXPERIMENTS.md             # what we test and why (source of truth)
 ├── requirements.txt           # Python dependencies
 ├── config/
-│   ├── default.yaml           # shared defaults (altitude, rates, log dir, URI)
-│   └── experiments/           # one file per experiment: the params to vary
-│       ├── surprise_minimization.yaml
-│       ├── distance.yaml
-│       ├── wall_follow.yaml
-│       └── formation.yaml
+│   ├── default.yaml           # shared: mode, URIs, height, rates, log dir
+│   └── experiments/
+│       ├── convoy.yaml              # E1 + E2 (one shared file → same scenario)
+│       └── formation_distance.yaml  # E3
 ├── src/
-│   ├── controllers/           # the control logic (sim == real)
-│   │   ├── base_controller.py
-│   │   ├── distance_controller.py
-│   │   └── surprise_minimization.py
+│   ├── controllers/           # pure control maths (sim == real)
+│   │   ├── convoy_controller.py     # leader, follower, surprise gating, repulsion
+│   │   └── formation_controller.py  # formation-potential gradient descent
 │   ├── experiments/           # orchestration: setup → run → log
-│   │   ├── surprise_minimization_experiment.py
-│   │   ├── distance_experiment.py
-│   │   ├── wall_follow_experiment.py
-│   │   └── formation_experiment.py
+│   │   ├── surprise_minimization_experiment.py  # E1 (proposed)
+│   │   ├── convoy_baseline_experiment.py        # E2 (baseline)
+│   │   └── formation_distance_experiment.py     # E3
 │   ├── utils/                 # shared helpers — the key to sim-to-real
-│   │   ├── connection.py      # build URI (sim vs real), connect/disconnect
-│   │   ├── flight.py          # takeoff, land, safe emergency shutdown
-│   │   ├── logging.py         # standard CSV logger + metadata sidecar
-│   │   └── sensors.py         # read Multiranger / Flow / state estimate
+│   │   ├── connection.py      # load config, build URIs (sim/real), connect
+│   │   ├── flight.py          # takeoff, safe landing, fly_safely() wrapper
+│   │   ├── sensors.py         # stream stateEstimate (x, y, z, vx, vy, vz)
+│   │   └── logging.py         # (planned) standard CSV logger + JSON sidecar
 │   └── tests/                 # sanity checks, NOT experiments
 │       ├── test_connection.py
 │       ├── takeoff_test.py
 │       ├── three_takeoff_test.py
-│       └── repeat_test.py
+│       └── hover_telemetry_test.py
 ├── scripts/
-│   └── run_experiment.sh      # launch an experiment by name + config
+│   └── run_experiment.sh      # start CrazySim, run one experiment, stop CrazySim
 ├── data/
-│   └── raw/                   # CSV logs (one per run) + .json sidecars
-├── analysis/
-│   ├── load.py                # load + concatenate runs into a dataframe
-│   ├── metrics.py             # per-run metrics (RMS error, mean surprise, …)
-│   ├── plots.py               # standard figures → analysis/figures/
-│   └── figures/
-└── cache/                     # simulator / build cache (git-ignored)
+│   └── raw/                   # one CSV per run (+ .json sidecar, planned)
+│       └── legacy/            # CSVs from the old scripts — unchanged
+├── analysis/                  # (planned) load, metrics, plots → analysis/figures/
+├── legacy/                    # the original scripts, unchanged, for reference
+└── cache/                     # CFLib parameter cache (git-ignored)
 ```
 
 ---
@@ -67,9 +58,9 @@ drone-surprisal/
 
 ### 1. Prerequisite: CrazySim
 
-Install and build CrazySim (the SITL simulator) by following its own repository.
-It brings in the Crazyflie firmware (SITL build), `crazyflie-lib-python`, and
-Gazebo. This project assumes you can already start the simulator and see a drone.
+Install and build CrazySim by following its own repository. It brings in the
+Crazyflie SITL firmware, `crazyflie-lib-python` (cflib) and Gazebo. This project
+assumes you can already start the simulator and see a drone.
 
 ### 2. Python environment for this repo
 
@@ -79,142 +70,141 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-`requirements.txt` should pin at least:
-
-```
-cflib            # crazyflie-lib-python
-numpy
-pandas
-pyyaml
-matplotlib
-```
-`[CONFIRM exact versions once the environment is frozen: pip freeze]`
+If CrazySim installed its own cflib into another venv, you can use that venv
+instead (see `VENV` below).
 
 ---
 
-## Running an experiment
+## Running
 
-1. Start the CrazySim simulator (separate terminal) and spawn the number of
-   drones the experiment needs.
-2. Run an experiment by name; parameters come from its config file:
+All commands are run from the **repo root**.
+
+### Option A — one command (starts and stops CrazySim for you)
 
 ```bash
-# via the runner
+./scripts/run_experiment.sh convoy_baseline
 ./scripts/run_experiment.sh surprise_minimization
-
-# or directly
-python -m src.experiments.surprise_minimization_experiment \
-       --config config/experiments/surprise_minimization.yaml \
-       --mode sim --runs 10
+./scripts/run_experiment.sh formation_distance --config my_settings.yaml
 ```
 
-Every run writes `data/raw/<experiment>_<timestamp>_run<NN>.csv` plus a matching
-`.json` metadata sidecar. **Do not** hand-edit these files.
+Paths are set with environment variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CRAZYSIM_DIR` | `<repo>/../CrazySim/crazyflie-firmware` | CrazySim firmware folder |
+| `VENV` | `<repo>/.venv` (skipped if missing) | Python venv to activate |
+| `N_DRONES` | `3` | drones to spawn |
+| `SIM_STARTUP_WAIT` | `10` | seconds to wait for CrazySim |
+
+```bash
+CRAZYSIM_DIR=~/crazyflie/CrazySim/crazyflie-firmware \
+VENV=~/crazyflie/crazysim-venv \
+./scripts/run_experiment.sh convoy_baseline
+```
+
+### Option B — CrazySim already running in another terminal
+
+```bash
+python -m src.experiments.convoy_baseline_experiment
+python -m src.experiments.surprise_minimization_experiment
+python -m src.experiments.formation_distance_experiment
+```
+
+Every experiment accepts `--config <file>` (default: its file in
+`config/experiments/`) and `--mode sim|real` (overrides `mode` in
+`config/default.yaml`).
+
+Each run currently writes `data/raw/<experiment>_<timestamp>.csv`.
+**Do not** hand-edit these files.
 
 ---
 
 ## Configuration
 
-All tunable values live in `config/`, never hard-coded in scripts. This is what
-lets you re-run an experiment with different parameters without editing code, and
-what records exactly what was run.
+All tunable values live in `config/`, never hard-coded in scripts.
 
-- `config/default.yaml` — shared: altitude, control rate, log rate, log dir,
-  connection settings, default seed.
-- `config/experiments/<name>.yaml` — per-experiment: the independent variables
-  and their values (e.g. target distances, noise levels, formation spacing).
+- `config/default.yaml` — shared: `mode`, URIs per mode, height, takeoff/land
+  time, telemetry rate, log dir.
+- `config/experiments/<name>.yaml` — the experiment's scenario and controller
+  values. Loaded on top of `default.yaml` (experiment values win).
 
-Rule: if a number affects a result, it belongs in a config file and in the run's
-metadata sidecar — not buried in the script.
+To try different values, copy the experiment's YAML, change it, and pass it
+with `--config`. Rule: if a number affects a result, it belongs in a config file.
 
 ---
 
 ## Writing a new experiment (conventions)
 
-Follow these so every experiment's output is comparable and auto-analysable:
+1. **Reuse the helpers.** Connect, take off, land and stream telemetry with
+   `src/utils/` — do not re-implement them.
+2. **Separate controller from experiment.** The *controller*
+   (`src/controllers/`) is pure maths: numbers in, commands out. It never talks
+   to a drone. The *experiment* (`src/experiments/`) reads telemetry, calls the
+   controller, sends commands and logs.
+3. **Fly through `fly_safely()`.** Write your experiment as a
+   `mission(drones, config)` function and pass it to `fly_safely()`, which
+   connects, takes off, and **always lands** — on normal finish, error or Ctrl-C.
+4. **Log the core schema** (EXPERIMENTS.md §7) plus your own columns. One run =
+   one CSV.
+5. **No sim-only logic in controllers.** Anything that differs between sim and
+   real goes in `src/utils/connection.py` or config.
 
-1. **Reuse the helpers.** Connection, takeoff, landing, and logging come from
-   `src/utils/` — do not re-implement them per script.
-2. **Separate controller from experiment.** The *controller* (`src/controllers/`)
-   decides actions; the *experiment* (`src/experiments/`) sets up conditions,
-   runs repetitions, and logs. This keeps controllers reusable on hardware.
-3. **Log the core schema** (see EXPERIMENTS.md §7) plus your experiment's extra
-   columns. Never rename core columns.
-4. **One run = one CSV + one sidecar.** Loop repetitions inside the experiment.
-5. **No sim-only logic in controllers.** Anything simulator-specific goes behind
-   `src/utils/connection.py` or config.
-6. **Fail safe.** Always wrap a run so that on any error or Ctrl-C the drone
-   lands / motors stop (`src/utils/flight.py`).
+---
+
+## Simulation → real drone
+
+Moving to hardware changes *configuration*, not control logic.
+
+1. **One switch:** `mode: sim|real` in `config/default.yaml`, or `--mode` on
+   the command line. Nothing in the control path knows which it is.
+2. **Connection is the only place that differs.** `src/utils/connection.py`
+   picks the URIs for the mode:
+   - **sim:** `udp://127.0.0.1:1985N` for drone N (19850 = CF1);
+   - **real:** radio URIs such as `radio://0/80/2M/E7E7E7E7E1` — set yours in
+     `config/default.yaml` *(still to fill in)*.
+3. **Positioning on hardware = Lighthouse.** All controllers use only the
+   absolute `stateEstimate` position and velocity (x, vx), which Lighthouse
+   provides directly. **No Multiranger or Flow deck is needed**, and the
+   controllers run **unchanged**.
+4. **Identical controllers.** `src/controllers/` must not import anything
+   sim-specific. If you ever need an `if sim:` inside a controller, stop —
+   that logic belongs in `connection.py` or config.
+5. **Safety already in place:** `fly_safely()` lands on any error or Ctrl-C;
+   landing calls `send_notify_setpoint_stop()` first (required on real
+   firmware after velocity setpoints); motors are stopped after landing; the
+   convoy followers have a safety repulsion that surprise gating cannot cancel.
+6. **Still to add before hardware (planned):** battery check and low-voltage
+   auto-land; geofence / max-altitude / max-speed clamp; command watchdog.
+7. **Start conservative:** low altitude, low speed, one drone, open space, a
+   hand on the kill switch — then scale up.
+
+---
+
+## Sanity checks
+
+Run before every experiment session (CrazySim running, from the repo root):
+
+```bash
+python -m src.tests.test_connection         # link + telemetry, never flies
+python -m src.tests.takeoff_test            # CF1 takeoff / hover / land
+python -m src.tests.three_takeoff_test      # 3 drones takeoff / hover / land
+python -m src.tests.hover_telemetry_test    # CF1 hover, position + height check
+```
 
 ---
 
 ## Data & analysis
 
-- Raw data is immutable: `data/raw/` is append-only, one file per run.
-- `analysis/load.py` reads all runs of an experiment (using the sidecars to tag
-  each row with its parameters) into a single dataframe.
-- `analysis/metrics.py` computes per-run metrics; `analysis/plots.py` produces
-  the standard figures defined in EXPERIMENTS.md §8.
-- Analysis **never** flies the drone — it only reads `data/raw/`.
-
-```bash
-python -m analysis.plots --experiment surprise_minimization
-# figures land in analysis/figures/
-```
+- `data/raw/` is append-only: one file per run, never edited.
+- `data/raw/legacy/` holds the CSVs from the pre-migration scripts, unchanged.
+- *(planned)* `analysis/` will load all runs, compute the per-run metrics
+  (EXPERIMENTS.md §8) and draw the standard figures into `analysis/figures/`.
+  Analysis never flies a drone.
 
 ---
 
-## Simulation → real drone (portability guide)
+## Legacy scripts
 
-The whole point of this layout is that moving to hardware changes *configuration*,
-not control logic. Keep to these rules:
-
-1. **One switch:** `--mode sim|real` (or `mode:` in config). Nothing else in the
-   control path knows which it is.
-2. **Connection is the only place that differs.** `src/utils/connection.py`
-   builds the link URI from the mode:
-   - **sim:** CrazySim exposes each SITL drone to CFLib on a local port in the
-     `19850+N` range (drone *N*). `[CONFIRM the exact URI form your CrazySim
-     build uses, e.g. udp://… .]`
-   - **real:** a radio URI such as `radio://0/80/2M/E7E7E7E7E7`.
-3. **Identical controllers.** `src/controllers/` must not import anything
-   sim-specific. If it runs in sim, it should run on hardware with the same code.
-4. **Safety wrappers for hardware (configurable, on by default on real):**
-   - battery check before arming and a low-voltage auto-land;
-   - a geofence / max-altitude / max-speed clamp;
-   - a watchdog timeout that lands if no command is sent;
-   - emergency-stop on exception or Ctrl-C.
-5. **Sensors:** confirm the same decks are present on the real drone as were
-   simulated (Multiranger, Flow deck) `[CONFIRM]`.
-6. **Start conservative on hardware:** low altitude, low speed, one drone, open
-   space, a hand on the kill switch, then scale up.
-
-> Golden rule: if you ever need an `if sim:` inside a controller, stop — that
-> logic belongs in `utils/connection.py` or in config instead.
-
----
-
-## Testing / sanity checks
-
-Before any experiment session:
-
-```bash
-python -m src.tests.test_connection      # link works
-python -m src.tests.takeoff_test         # single drone takeoff/land
-python -m src.tests.three_takeoff_test   # multi-drone (if used)
-```
-
----
-
-## Migration from the current flat layout
-
-The repo currently has every script at the top level. To adopt this structure
-without breaking the working flight:
-
-1. Commit the current working state to a branch first (a known-good baseline).
-2. Move files into `src/…` per the tree above; update imports.
-3. Extract repeated connect/takeoff/land/log code into `src/utils/`.
-4. Pull hard-coded numbers into `config/`.
-5. Re-run the sanity checks after each step — never move everything at once.
-
-See **[EXPERIMENTS.md](EXPERIMENTS.md)** for what each experiment must do.
+The original flat-layout scripts are kept unchanged in `legacy/` as a
+known-good reference (see `legacy/README.md` for where each one moved). Each is
+deleted once its new version has been confirmed in the simulator.
