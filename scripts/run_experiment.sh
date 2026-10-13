@@ -30,6 +30,11 @@
 
 set -e   # stop at the first command that fails
 
+export CRAZYSIM_DIR="$HOME/CrazySim/crazyflie-firmware"
+export VENV="$HOME/crazysim-venv"
+export N_DRONES=3
+export SIM_STARTUP_WAIT=15
+
 
 # ============================================================
 # ARGUMENTS

@@ -14,6 +14,14 @@ Run from the repo root (CrazySim running with 3 drones):
 
 import argparse
 
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message="Using legacy TYPE_VELOCITY_WORLD_LEGACY.*",
+    category=DeprecationWarning,
+)
+
 from src.utils.connection import load_config
 from src.utils.flight import fly_safely
 from src.experiments.convoy_baseline_experiment import (

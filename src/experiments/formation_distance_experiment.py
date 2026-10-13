@@ -16,6 +16,14 @@ Run from the repo root (CrazySim running with 3 drones):
     python -m src.experiments.formation_distance_experiment
 """
 
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message="Using legacy TYPE_VELOCITY_WORLD_LEGACY.*",
+    category=DeprecationWarning,
+)
+
 import argparse
 import time
 

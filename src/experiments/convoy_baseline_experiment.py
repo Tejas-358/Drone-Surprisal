@@ -18,6 +18,14 @@ Run from the repo root (CrazySim running with 3 drones):
     python -m src.experiments.convoy_baseline_experiment
 """
 
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message="Using legacy TYPE_VELOCITY_WORLD_LEGACY.*",
+    category=DeprecationWarning,
+)
+
 import argparse
 import csv
 import os
