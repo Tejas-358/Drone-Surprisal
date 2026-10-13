@@ -26,7 +26,15 @@ def takeoff_all(drones, config):
 
     Called from: fly_safely(), before the mission starts.
     """
-    print(f"\nTaking off to {config['height']} m...")
+    # Recent Crazyflie firmware refuses to spin the motors until the drone
+    # is "armed". Without this, takeoff() is silently ignored on a real drone.
+    # (Harmless in the simulator.)
+    print("\nArming...")
+    for scf in drones:
+        scf.cf.platform.send_arming_request(True)
+    time.sleep(1.0)   # give the firmware a moment to arm
+
+    print(f"Taking off to {config['height']} m...")
 
     for scf in drones:
         # High-level commander: the drone plans its own smooth climb.
@@ -86,6 +94,8 @@ def stop_motors(drones):
         try:
             # A "stop" setpoint = zero thrust, motors off.
             scf.cf.commander.send_stop_setpoint()
+            # Disarm, so the motors cannot start again by accident.
+            scf.cf.platform.send_arming_request(False)
         except Exception:
             pass
 

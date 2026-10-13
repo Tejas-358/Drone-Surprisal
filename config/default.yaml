@@ -12,7 +12,7 @@
 
 # "sim" = CrazySim on this computer, "real" = real Crazyflies over radio.
 # This is the ONLY switch between simulation and hardware.
-mode: sim
+mode: real
 
 # --- Connection -------------------------------------------------
 # One URI per drone. Drone 0 is the first entry (called CF1 in prints).
@@ -22,10 +22,12 @@ uris:
     - udp://127.0.0.1:19851   # CF2
     - udp://127.0.0.1:19852   # CF3
   real:
-    # [FILL IN] your radio addresses, e.g. radio://0/80/2M/E7E7E7E7E1
-    - radio://0/80/2M/E7E7E7E7E1
-    - radio://0/80/2M/E7E7E7E7E2
-    - radio://0/80/2M/E7E7E7E7E3
+    # Find a drone's URI with:
+    #   python -c "import cflib.crtp; cflib.crtp.init_drivers(); print(cflib.crtp.scan_interfaces())"
+    - radio://0/80/2M/E7E7E7E7E7   # CF1 — confirmed flying (factory default address)
+    # [FILL IN] CF2 / CF3 — placeholders, not checked yet
+    - radio://0/80/2M/E7E7E7E7E6
+    - radio://0/80/2M/E7E7E7E7E5
 
 # Folder where CFLib stores the drone's parameter/log tables.
 cache_dir: ./cache
