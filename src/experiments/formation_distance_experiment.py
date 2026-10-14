@@ -30,6 +30,7 @@ import time
 from src.utils.connection import load_config
 from src.utils.flight import fly_safely
 from src.utils import sensors
+from src.utils.safety import check_in_flight
 from src.controllers.formation_controller import formation_step
 # Reuse the start-line and CSV helpers from the convoy experiment
 # (save_csv will be replaced by the standard logger in a later step).
@@ -64,6 +65,9 @@ def run_formation(drones, config):
             t = time.time() - start_time
             if t >= config["duration"]:
                 break
+
+            # Abort (-> land) if a drone left the arena or its data is stale.
+            check_in_flight(states, config)
 
             # Latest x of CF1, CF2, CF3.
             x = [s["x"] for s in states]

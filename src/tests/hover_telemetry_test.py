@@ -13,6 +13,7 @@ Run from the repo root (CrazySim running, at least 1 drone):
     python -m src.tests.hover_telemetry_test
 """
 
+import argparse
 import time
 
 from src.utils.connection import load_config
@@ -64,7 +65,13 @@ def watch_position(drones, config):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["sim", "real"], help="override mode in config")
+    args = parser.parse_args()
+
     config = load_config()
+    if args.mode:
+        config["mode"] = args.mode
     fly_safely(config, 1, watch_position)   # 1 drone = CF1 only
     print("Done.")
 

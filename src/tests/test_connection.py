@@ -42,9 +42,12 @@ def distance_between(p1, p2):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--drones", type=int, default=3, help="how many drones to check")
+    parser.add_argument("--mode", choices=["sim", "real"], help="override mode in config")
     args = parser.parse_args()
 
     config = load_config()
+    if args.mode:
+        config["mode"] = args.mode
     names = [f"CF{i + 1}" for i in range(args.drones)]
 
     drones = connect_all(config, args.drones)

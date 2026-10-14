@@ -11,6 +11,7 @@ Run from the repo root (CrazySim running with 3 drones):
     python -m src.tests.three_takeoff_test
 """
 
+import argparse
 import time
 
 from src.utils.connection import load_config
@@ -36,7 +37,13 @@ def hover(drones, config):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["sim", "real"], help="override mode in config")
+    args = parser.parse_args()
+
     config = load_config()
+    if args.mode:
+        config["mode"] = args.mode
     fly_safely(config, 3, hover)   # 3 drones = CF1, CF2, CF3
     print("Done.")
 

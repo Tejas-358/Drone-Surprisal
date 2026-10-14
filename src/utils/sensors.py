@@ -30,6 +30,7 @@ def start_state_logging(scf, period_ms):
     Output: (state, log_config)
             state      — a dictionary that is updated in the background
                          with the latest values: state["x"], state["vx"], ...
+                         plus state["received_at"] (PC time of the last packet).
                          It stays EMPTY until the first packet arrives.
             log_config — keep this so you can stop the stream later.
 
@@ -48,6 +49,8 @@ def start_state_logging(scf, period_ms):
     def callback(timestamp, data, logconf):
         for name in STATE_VARIABLES:
             state[name] = data[f"stateEstimate.{name}"]
+        # PC time when this packet arrived, so safety.py can spot stale data.
+        state["received_at"] = time.time()
 
     log_config.data_received_cb.add_callback(callback)
     scf.cf.log.add_config(log_config)

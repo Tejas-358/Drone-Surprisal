@@ -38,5 +38,24 @@ land_time: 2.0         # s, how long the landing manoeuvre takes
 # --- Telemetry --------------------------------------------------
 log_period_ms: 100     # how often the drone sends its state (100 ms = 10 Hz)
 
+# --- Safety (used by src/utils/safety.py) -----------------------
+# Arena = the box the drones must stay inside, in Lighthouse coordinates (m).
+# A drone outside it -> refuse to take off / land everything immediately.
+arena:
+  sim:                 # big: CrazySim has no walls
+    x_min: -10.0
+    x_max: 10.0
+    y_min: -10.0
+    y_max: 10.0
+    z_max: 2.0
+  real:                # [CONFIRM] measure YOUR flight area and keep ~0.5 m
+    x_min: -1.5        # away from walls / base stations / people
+    x_max: 1.5
+    y_min: -1.0
+    y_max: 1.0
+    z_max: 1.2
+
+max_data_age: 0.5      # s, land everything if a drone's data is older than this
+
 # --- Output -----------------------------------------------------
 log_dir: data/raw      # where CSV logs + JSON sidecars are written

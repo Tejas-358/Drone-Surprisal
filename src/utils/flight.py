@@ -14,6 +14,23 @@ calling takeoff/land themselves.
 import time
 
 from src.utils.connection import connect_all, disconnect_all
+from src.utils.safety import preflight_check
+
+
+def set_armed(scf, armed):
+    """
+    Arm (armed=True) or disarm (armed=False) one drone.
+
+    Recent Crazyflie firmware will not spin the motors until the drone is
+    armed. Newer cflib versions use cf.supervisor for this, older ones
+    cf.platform — we try the new one first and fall back to the old one.
+
+    Called from: takeoff_all() (arm) and stop_motors() (disarm).
+    """
+    try:
+        scf.cf.supervisor.send_arming_request(armed)
+    except AttributeError:
+        scf.cf.platform.send_arming_request(armed)
 
 
 def takeoff_all(drones, config):
@@ -26,7 +43,12 @@ def takeoff_all(drones, config):
 
     Called from: fly_safely(), before the mission starts.
     """
-    print(f"\nTaking off to {config['height']} m...")
+    print("\nArming...")
+    for scf in drones:
+        set_armed(scf, True)
+    time.sleep(1.0)   # give the firmware a moment to arm
+
+    print(f"Taking off to {config['height']} m...")
 
     for scf in drones:
         # High-level commander: the drone plans its own smooth climb.
@@ -86,6 +108,8 @@ def stop_motors(drones):
         try:
             # A "stop" setpoint = zero thrust, motors off.
             scf.cf.commander.send_stop_setpoint()
+            # Disarm, so the motors cannot start again by accident.
+            set_armed(scf, False)
         except Exception:
             pass
 
@@ -109,6 +133,14 @@ def fly_safely(config, n_drones, mission):
     Called from: main() in every test and experiment.
     """
     drones = connect_all(config, n_drones)
+
+    # Check positions BEFORE arming. If this fails, nothing has taken off,
+    # so we only need to disconnect.
+    try:
+        preflight_check(drones, config)
+    except Exception:
+        disconnect_all(drones)
+        raise
 
     try:
         takeoff_all(drones, config)

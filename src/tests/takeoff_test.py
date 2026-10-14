@@ -11,6 +11,7 @@ Run from the repo root (CrazySim running, at least 1 drone):
 Press Ctrl-C while it hovers to check the drone still lands safely.
 """
 
+import argparse
 import time
 
 from src.utils.connection import load_config
@@ -36,7 +37,13 @@ def hover(drones, config):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["sim", "real"], help="override mode in config")
+    args = parser.parse_args()
+
     config = load_config()
+    if args.mode:
+        config["mode"] = args.mode
     fly_safely(config, 1, hover)   # 1 drone = CF1 only
     print("Done.")
 

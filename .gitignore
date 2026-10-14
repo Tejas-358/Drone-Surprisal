@@ -7,3 +7,6 @@ cache/
 
 # Virtual environments
 .venv/
+
+# Local virtual environment
+venv/

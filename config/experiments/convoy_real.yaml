@@ -1,0 +1,32 @@
+# ============================================================
+# convoy_real.yaml — the convoy (E1 / E2) shrunk to fit the REAL
+# Lighthouse arena (x from -1.5 to 1.5 m in config/default.yaml).
+#
+# Same keys as convoy.yaml. Use it with:
+#   --mode real --config config/experiments/convoy_real.yaml
+#
+# Layout along x (y = 0 for all):
+#   CF3 (-0.9) -- CF2 (-0.2) -- CF1 (0.5) ---> leader stops at x = 1.1
+# Place the drones on these spots before starting: the pre-flight check
+# refuses to fly if a drone is more than 0.3 m from its spot.
+# ============================================================
+
+start_x: [0.5, -0.2, -0.9]   # m, CF1, CF2, CF3
+formation_time: 3.0          # s
+
+wall_x: 1.6                  # m, virtual wall
+wall_stop_distance: 0.5      # m -> leader stops at x = 1.1 (0.4 m inside the arena)
+leader_speed: 0.15           # m/s
+
+follow_distance: 0.7         # m, target gap
+follow_gain: 0.8
+max_follow_speed: 0.15       # m/s
+
+safe_distance: 0.45          # m, followers back away below this gap
+min_gap_abort: 0.3           # m, ABORT and land everything below this gap
+
+noise_scale: 0.20            # N (same as convoy.yaml)
+surprise_gain: 1.0
+
+duration: 20.0               # s
+control_period: 0.1          # s (10 Hz)
