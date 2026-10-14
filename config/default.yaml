@@ -12,7 +12,7 @@
 
 # "sim" = CrazySim on this computer, "real" = real Crazyflies over radio.
 # This is the ONLY switch between simulation and hardware.
-mode: sim
+mode: real
 
 # --- Connection -------------------------------------------------
 # One URI per drone. Drone 0 is the first entry (called CF1 in prints).
@@ -24,16 +24,16 @@ uris:
   real:
     # [FILL IN] your radio addresses, e.g. radio://0/80/2M/E7E7E7E7E1
     - radio://0/80/2M/E7E7E7E7E6
-    - radio://0/80/2M/E7E7E7E7E5
     - radio://0/80/2M/E7E7E7E7E7
+    - radio://0/80/2M/E7E7E7E7E5
 
 # Folder where CFLib stores the drone's parameter/log tables.
 cache_dir: ./cache
 
 # --- Flight -----------------------------------------------------
-height: 0.9            # m, hover altitude after takeoff
-takeoff_time: 8.0      # s, how long the takeoff manoeuvre takes
-land_time: 2.0         # s, how long the landing manoeuvre takes
+height: 0.4            # m, hover altitude after takeoff
+takeoff_time: 5.0      # s, how long the takeoff manoeuvre takes
+land_time: 10.0         # s, how long the landing manoeuvre takes
 
 # --- Telemetry --------------------------------------------------
 log_period_ms: 100     # how often the drone sends its state (100 ms = 10 Hz)
@@ -49,15 +49,15 @@ arena:
     y_max: 10.0
     z_max: 2.0
   real:                # [CONFIRM] measure YOUR flight area and keep ~0.5 m
-    x_min: -1.5        # away from walls / base stations / people
-    x_max: 1.5
-    y_min: -1.0
-    y_max: 1.0
-    z_max: 1.2
+    x_min: -3.5        # away from walls / base stations / people
+    x_max: 3.5
+    y_min: -3.0
+    y_max: 3.0
+    z_max: 6.2
 
 max_data_age: 0.5      # s, land everything if a drone's data is older than this
-max_speed: 1.0         # m/s, CUT MOTORS if a drone moves faster (flying away)
-min_battery_v: 3.8     # V, refuse to take off below this (measured at rest)
+max_speed: 10.0         # m/s, CUT MOTORS if a drone moves faster (flying away)
+min_battery_v: 2.8     # V, refuse to take off below this (measured at rest)
 
 preflight_max_spread: 0.05   # m, refuse to fly if the position jumps more than
                              # this while the drone sits still on the floor
