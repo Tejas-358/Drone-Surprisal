@@ -23,16 +23,16 @@ uris:
     - udp://127.0.0.1:19852   # CF3
   real:
     # [FILL IN] your radio addresses, e.g. radio://0/80/2M/E7E7E7E7E1
-    - radio://0/80/2M/E7E7E7E7E7
-    - radio://0/80/2M/E7E7E7E7E5
     - radio://0/80/2M/E7E7E7E7E6
+    - radio://0/80/2M/E7E7E7E7E5
+    - radio://0/80/2M/E7E7E7E7E7
 
 # Folder where CFLib stores the drone's parameter/log tables.
 cache_dir: ./cache
 
 # --- Flight -----------------------------------------------------
-height: 0.5            # m, hover altitude after takeoff
-takeoff_time: 2.0      # s, how long the takeoff manoeuvre takes
+height: 0.9            # m, hover altitude after takeoff
+takeoff_time: 8.0      # s, how long the takeoff manoeuvre takes
 land_time: 2.0         # s, how long the landing manoeuvre takes
 
 # --- Telemetry --------------------------------------------------
@@ -57,6 +57,8 @@ arena:
 
 max_data_age: 0.5      # s, land everything if a drone's data is older than this
 max_speed: 1.0         # m/s, CUT MOTORS if a drone moves faster (flying away)
+min_battery_v: 3.8     # V, refuse to take off below this (measured at rest)
+
 preflight_max_spread: 0.05   # m, refuse to fly if the position jumps more than
                              # this while the drone sits still on the floor
 

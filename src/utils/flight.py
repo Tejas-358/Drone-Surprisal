@@ -36,6 +36,31 @@ def set_armed(scf, armed):
         scf.cf.platform.send_arming_request(armed)
 
 
+# Meaning of each bit in the firmware's "supervisor.info" status number.
+SUPERVISOR_BITS = ["can be armed", "ARMED", "auto-arm", "can fly", "FLYING",
+                   "TUMBLED", "LOCKED (power-cycle needed)", "CRASHED"]
+
+
+def describe_supervisor(state):
+    """
+    Turn a drone's supervisor status number into readable words.
+
+    Input:  state — one drone's telemetry dictionary (from sensors.py)
+    Output: e.g. "can be armed, ARMED, can fly", or a note if unknown.
+
+    Called from: takeoff_all(), to explain why a drone did not arm or fly.
+    """
+    if "supervisor" not in state:
+        return "status unknown (older firmware)"
+    on = [name for bit, name in enumerate(SUPERVISOR_BITS) if state["supervisor"] & (1 << bit)]
+    return ", ".join(on) if on else "nothing set"
+
+
+def is_armed(state):
+    """True if the drone reports it is armed (or if the firmware can't tell us)."""
+    return "supervisor" not in state or bool(state["supervisor"] & (1 << 1))
+
+
 def takeoff_all(drones, states, config):
     """
     Send a takeoff command to every drone and wait until they are hovering.
@@ -52,15 +77,45 @@ def takeoff_all(drones, states, config):
         set_armed(scf, True)
     time.sleep(1.0)   # give the firmware a moment to arm
 
+    # Did every drone really arm? A request can get lost on a busy radio,
+    # so ask a second time; if a drone still refuses, stop BEFORE takeoff.
+    for i, (scf, state) in enumerate(zip(drones, states)):
+        if not is_armed(state):
+            set_armed(scf, True)
+            time.sleep(1.0)
+        if not is_armed(state):
+            raise RuntimeError(f"CF{i + 1} refused to arm. Status: {describe_supervisor(state)}. "
+                               "Check battery; power-cycle it if LOCKED/CRASHED/TUMBLED.")
+
     print(f"Taking off to {config['height']} m...")
 
     for scf in drones:
         # High-level commander: the drone plans its own smooth climb.
         scf.cf.high_level_commander.takeoff(config["height"], config["takeoff_time"])
 
+    # Part-way through the climb every drone should be off the floor. One
+    # still on the floor most likely missed the takeoff command on the busy
+    # radio: send it again. (We wait 40% of takeoff_time, because the climb
+    # starts slowly — with a long takeoff_time z barely changes at first.)
+    watch(states, config, max(1.0, 0.4 * config["takeoff_time"]))
+
+    for i, (scf, state) in enumerate(zip(drones, states)):
+        if state["z"] < 0.05:
+            print(f"CF{i + 1} has not started climbing — resending takeoff.")
+            scf.cf.high_level_commander.takeoff(config["height"], config["takeoff_time"])
+
     # Wait for the climb to finish, plus 1 s to settle — checking safety
     # the whole time, so a drone that flies off is stopped straight away.
     watch(states, config, config["takeoff_time"] + 1.0)
+
+
+    # Did every drone really leave the ground? If one is still down, stop
+    # here (the others get landed) instead of flying an incomplete group.
+    for i, state in enumerate(states):
+        if state["z"] < 0.5 * config["height"]:
+            raise RuntimeError(f"CF{i + 1} did not take off (z={state['z']:.2f} m). "
+                               f"Status: {describe_supervisor(state)}.")
+
     print("Hovering.")
 
 

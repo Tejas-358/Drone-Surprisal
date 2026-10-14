@@ -30,7 +30,9 @@ def start_state_logging(scf, period_ms):
     Output: (state, log_config)
             state      — a dictionary that is updated in the background
                          with the latest values: state["x"], state["vx"], ...
-                         plus state["received_at"] (PC time of the last packet).
+                         plus state["received_at"] (PC time of the last packet)
+                         and, on newer firmware, state["supervisor"] (status bits,
+                         see flight.describe_supervisor()).
                          It stays EMPTY until the first packet arrives.
             log_config — keep this so you can stop the stream later.
 
@@ -41,6 +43,13 @@ def start_state_logging(scf, period_ms):
     for name in STATE_VARIABLES:
         log_config.add_variable(f"stateEstimate.{name}", "float")
 
+    # The supervisor status (armed? locked? crashed?) — 2 more bytes, so the
+    # packet is exactly full (26 bytes). Only newer firmware has it, so we
+    # check the drone's list of log variables first.
+    has_supervisor = scf.cf.log.toc.get_element_by_complete_name("supervisor.info") is not None
+    if has_supervisor:
+        log_config.add_variable("supervisor.info", "uint16_t")
+
     state = {}
 
     # CFLib calls this in the background every time a packet arrives.
@@ -49,6 +58,8 @@ def start_state_logging(scf, period_ms):
     def callback(timestamp, data, logconf):
         for name in STATE_VARIABLES:
             state[name] = data[f"stateEstimate.{name}"]
+        if has_supervisor:
+            state["supervisor"] = data["supervisor.info"]
         # PC time when this packet arrived, so safety.py can spot stale data.
         state["received_at"] = time.time()
 
@@ -113,5 +124,40 @@ def stop_all(log_configs):
     for log_config in log_configs:
         try:
             log_config.stop()
+            # Also remove it from the drone, so a later connection does not
+            # get leftover packets ("Error no LogEntry to handle id=...").
+            log_config.delete()
         except Exception:
             pass
+
+
+
+def read_battery(scf):
+    """
+    Read one drone's battery voltage once.
+
+    Input:  scf — one connected drone
+    Output: battery voltage in volts (float), or None if nothing arrived.
+            A full battery is ~4.2 V at rest; below ~3.8 V a Crazyflie with
+            a Lighthouse deck may not have the power to take off.
+
+    Called from: safety.preflight_check(), before arming.
+    """
+    log_config = LogConfig(name="Battery", period_in_ms=100)
+    log_config.add_variable("pm.vbat", "float")
+    result = {}
+
+    def callback(timestamp, data, logconf):
+        result["vbat"] = data["pm.vbat"]
+
+    log_config.data_received_cb.add_callback(callback)
+    scf.cf.log.add_config(log_config)
+    log_config.start()
+
+    # Wait up to 2 s for the first packet.
+    end = time.time() + 2.0
+    while "vbat" not in result and time.time() < end:
+        time.sleep(0.05)
+
+    stop_all([log_config])
+    return result.get("vbat")

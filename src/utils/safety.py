@@ -23,6 +23,8 @@ experiment control loops (check_in_flight every step).
 
 import time
 
+from src.utils import sensors
+
 
 class EmergencyStop(RuntimeError):
     """Raised when the motors must be cut immediately (see top of file)."""
@@ -40,12 +42,20 @@ def preflight_check(drones, states, config):
 
     Called from: fly_safely(), after connecting and BEFORE arming.
     """
-    # 1. On real drones: is the Lighthouse deck detected?
-    #    (CrazySim drones have no physical decks, so skip this in sim.)
+    # 1. On real drones: is the Lighthouse deck detected, and is the
+    #    battery charged enough to lift off?
+    #    (CrazySim drones have no physical decks or batteries, so skip in sim.)
     if config["mode"] == "real":
         for i, scf in enumerate(drones):
             if int(scf.cf.param.get_value("deck.bcLighthouse4")) != 1:
                 raise RuntimeError(f"CF{i + 1}: Lighthouse deck not detected. Not flying.")
+
+            vbat = sensors.read_battery(scf)
+            print(f"CF{i + 1} battery: {vbat:.2f} V" if vbat else f"CF{i + 1} battery: unknown")
+            if vbat is not None and vbat < config["min_battery_v"]:
+                raise RuntimeError(f"CF{i + 1}: battery {vbat:.2f} V is below "
+                                   f"{config['min_battery_v']} V. Charge it. Not flying.")
+
 
     # 2. Record each drone's position 10 times over 1 second.
     samples = [[] for _ in states]
