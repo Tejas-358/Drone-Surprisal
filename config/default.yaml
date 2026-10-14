@@ -56,6 +56,10 @@ arena:
     z_max: 1.2
 
 max_data_age: 0.5      # s, land everything if a drone's data is older than this
+max_speed: 1.0         # m/s, CUT MOTORS if a drone moves faster (flying away)
+preflight_max_spread: 0.05   # m, refuse to fly if the position jumps more than
+                             # this while the drone sits still on the floor
+
 
 # --- Output -----------------------------------------------------
 log_dir: data/raw      # where CSV logs + JSON sidecars are written

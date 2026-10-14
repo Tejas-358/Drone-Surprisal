@@ -1,32 +1,41 @@
 """
 safety.py — checks that stop a flight BEFORE something goes wrong.
 
-Two checks:
   preflight_check() — before arming: is every drone's position valid,
-                      on the floor, inside the arena, and (for experiments)
-                      sitting on its start spot?
-  check_in_flight() — every control step: is every drone inside the
-                      arena, is its data fresh, and are drones too close?
+                      STEADY, on the floor, inside the arena, and (real
+                      experiments) sitting on its start spot?
+  check_in_flight() — while flying: is every drone inside the arena, not
+                      flying too fast, is its data fresh, are drones too close?
+  watch()           — "sleep" for a while, running check_in_flight() 10x
+                      per second. Use it instead of time.sleep() in flight.
 
-Both simply RAISE an error when something is wrong. fly_safely() in
-flight.py catches every error by landing all drones, so "raise" here
-means "abort and land".
+Two kinds of error:
+  RuntimeError   -> fly_safely() LANDS all drones (e.g. stale data, drones
+                    too close: the position is still trustworthy).
+  EmergencyStop  -> fly_safely() CUTS THE MOTORS at once (drone outside the
+                    arena or flying too fast: the position estimate is
+                    probably broken, so trying to "land" could fly it into
+                    a wall. Dropping from < 1 m is safer.)
 
-Used by: flight.py (preflight, for every test and experiment) and the
-experiment control loops (in-flight, every step).
+Used by: flight.py (preflight + watch during takeoff/hover) and the
+experiment control loops (check_in_flight every step).
 """
 
 import time
 
-from src.utils import sensors
+
+class EmergencyStop(RuntimeError):
+    """Raised when the motors must be cut immediately (see top of file)."""
 
 
-def preflight_check(drones, config):
+def preflight_check(drones, states, config):
     """
-    Refuse to take off unless every drone has a sensible position.
+    Refuse to take off unless every drone has a valid, steady position.
 
     Input:  drones — list from connect_all()
-            config — uses mode, arena, and start_x if the experiment has one
+            states — list from sensors.start_all() (already streaming)
+            config — uses mode, arena, preflight_max_spread, and start_x if
+                     the experiment has one
     Output: none. Raises RuntimeError (nothing takes off) if a check fails.
 
     Called from: fly_safely(), after connecting and BEFORE arming.
@@ -38,23 +47,36 @@ def preflight_check(drones, config):
             if int(scf.cf.param.get_value("deck.bcLighthouse4")) != 1:
                 raise RuntimeError(f"CF{i + 1}: Lighthouse deck not detected. Not flying.")
 
-    # 2. Read every drone's current position for a moment.
-    states, log_configs = sensors.start_all(drones, config["log_period_ms"])
-    try:
-        sensors.wait_for_data(states)
-        time.sleep(0.5)   # let a few fresh packets arrive
-        positions = [(s["x"], s["y"], s["z"]) for s in states]
-    finally:
-        sensors.stop_all(log_configs)
+    # 2. Record each drone's position 10 times over 1 second.
+    samples = [[] for _ in states]
+    for _ in range(10):
+        for i, s in enumerate(states):
+            samples[i].append((s["x"], s["y"], s["z"]))
+        time.sleep(0.1)
 
     arena = config["arena"][config["mode"]]   # separate limits for sim and real
-    for i, (x, y, z) in enumerate(positions):
-        name = f"CF{i + 1}"
-        print(f"{name} on the ground at x={x:.2f} y={y:.2f} z={z:.2f}")
 
-        # On the floor? A position like z = 108 means "no real position fix".
-        if abs(z) > 0.15:
-            raise RuntimeError(f"{name}: z={z:.2f} m but it should be on the floor. "
+    for i, points in enumerate(samples):
+        name = f"CF{i + 1}"
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        zs = [p[2] for p in points]
+        x, y, z = xs[-1], ys[-1], zs[-1]
+
+        # Steady? The drone is sitting still, so the estimate should barely
+        # move. If it jumps around, Lighthouse is not tracking it properly
+        # and the drone would chase those jumps in flight.
+        spread = max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+        print(f"{name} on the ground at x={x:.2f} y={y:.2f} z={z:.2f} "
+              f"(jitter {spread * 100:.1f} cm)")
+        if spread > config["preflight_max_spread"]:
+            raise RuntimeError(
+                f"{name}: position jumps by {spread * 100:.0f} cm while sitting "
+                "still. Lighthouse tracking is not reliable. Not flying.")
+
+        # On the floor? z far from 0 means the estimate is wrong.
+        if abs(z) > 0.1:
+            raise RuntimeError(f"{name}: z={z:.2f} m but it is on the floor. "
                                "Position estimate is not valid. Not flying.")
 
         # Inside the arena?
@@ -76,15 +98,17 @@ def preflight_check(drones, config):
 
 def check_in_flight(states, config, min_gap=None):
     """
-    Abort the flight if anything looks unsafe. Call once per control step.
+    Stop the flight if anything looks unsafe. Call once per control step.
 
     Input:  states  — list from sensors.start_all() (latest data per drone)
-            config  — uses arena and max_data_age
-            min_gap — optional: abort if neighbouring drones (in list order,
+            config  — uses arena, max_speed, max_data_age
+            min_gap — optional: land if neighbouring drones (in list order,
                       drone i+1 behind drone i along x) get closer than this (m)
-    Output: none. Raises RuntimeError -> fly_safely() lands every drone.
+    Output: none.
+            Raises EmergencyStop (-> motors cut) if a drone is outside the
+            arena or too fast; RuntimeError (-> land) for the other problems.
 
-    Called from: the control loops in the experiment scripts.
+    Called from: watch() below and the experiment control loops.
     """
     arena = config["arena"][config["mode"]]
     now = time.time()
@@ -92,20 +116,42 @@ def check_in_flight(states, config, min_gap=None):
     for i, s in enumerate(states):
         name = f"CF{i + 1}"
 
-        # Old data means the radio link is dropping packets. Acting on an
-        # old position is dangerous, so stop.
-        age = now - s["received_at"]
-        if age > config["max_data_age"]:
-            raise RuntimeError(f"ABORT: no fresh data from {name} for {age:.2f} s")
-
         if not (arena["x_min"] <= s["x"] <= arena["x_max"] and
                 arena["y_min"] <= s["y"] <= arena["y_max"] and
                 s["z"] <= arena["z_max"]):
-            raise RuntimeError(f"ABORT: {name} left the arena "
-                               f"(x={s['x']:.2f} y={s['y']:.2f} z={s['z']:.2f})")
+            raise EmergencyStop(f"EMERGENCY STOP: {name} outside the arena "
+                                f"(x={s['x']:.2f} y={s['y']:.2f} z={s['z']:.2f})")
+
+        # Much faster than any of our manoeuvres -> the drone is flying away.
+        speed = (s["vx"] ** 2 + s["vy"] ** 2 + s["vz"] ** 2) ** 0.5
+        if speed > config["max_speed"]:
+            raise EmergencyStop(f"EMERGENCY STOP: {name} moving at {speed:.2f} m/s")
+
+        # Old data means the radio link is dropping packets. Acting on an
+        # old position is dangerous, so land.
+        age = now - s["received_at"]
+        if age > config["max_data_age"]:
+            raise RuntimeError(f"ABORT: no fresh data from {name} for {age:.2f} s")
 
     if min_gap is not None:
         for i in range(len(states) - 1):
             gap = states[i]["x"] - states[i + 1]["x"]
             if gap < min_gap:
                 raise RuntimeError(f"ABORT: CF{i + 1} and CF{i + 2} only {gap:.2f} m apart")
+
+
+def watch(states, config, seconds):
+    """
+    Wait for `seconds`, checking safety 10 times per second.
+
+    Input:  states  — list from sensors.start_all()
+            config  — passed on to check_in_flight()
+            seconds — how long to wait
+    Output: none. Raises (see check_in_flight) as soon as something is unsafe.
+
+    Called from: flight.py during takeoff, and the hover tests.
+    """
+    end = time.time() + seconds
+    while time.time() < end:
+        check_in_flight(states, config)
+        time.sleep(0.1)

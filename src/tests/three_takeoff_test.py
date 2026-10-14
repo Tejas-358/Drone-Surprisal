@@ -16,24 +16,27 @@ import time
 
 from src.utils.connection import load_config
 from src.utils.flight import fly_safely
+from src.utils.safety import watch
 
 
 HOVER_SECONDS = 5.0   # how long to hover before landing
 
 
-def hover(drones, config):
+def hover(drones, config, states):
     """
     The 'mission' for this test: all drones just hover in place.
 
     Input:  drones — list of 3 connected drones (from fly_safely)
             config — dictionary from load_config()
+            states — live telemetry, used by watch() for safety checks
     Output: none.
 
     Called from: fly_safely(), after all three have taken off.
     Landing happens automatically when this function returns.
     """
     print(f"All {len(drones)} drones hovering for {HOVER_SECONDS:.0f} s...")
-    time.sleep(HOVER_SECONDS)
+    watch(states, config, HOVER_SECONDS)   # like sleep, but stops if unsafe
+
 
 
 def main():

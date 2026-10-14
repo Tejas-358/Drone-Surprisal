@@ -18,50 +18,45 @@ import time
 
 from src.utils.connection import load_config
 from src.utils.flight import fly_safely
-from src.utils import sensors
+from src.utils.safety import check_in_flight
 
 
 WATCH_SECONDS = 6.0    # how long to print positions while hovering
 PRINT_PERIOD = 0.2     # seconds between printed lines
 
 
-def watch_position(drones, config):
+def watch_position(drones, config, states):
     """
     The 'mission' for this test: hover and print CF1's position.
 
     Input:  drones — list with 1 connected drone (from fly_safely)
-            config — dictionary from load_config() (uses log_period_ms, height)
+            config — dictionary from load_config() (uses height)
+            states — live telemetry from fly_safely (states[0] = CF1)
     Output: none.
 
     Called from: fly_safely(), after takeoff. Landing happens
     automatically when this function returns (or crashes).
     """
-    # states[0] is updated in the background with CF1's latest data.
-    states, log_configs = sensors.start_all(drones, config["log_period_ms"])
-    state = states[0]
+    state = states[0]   # updated in the background with CF1's latest data
+    start_time = time.time()
 
-    try:
-        sensors.wait_for_data(states)   # stop with an error if nothing arrives
-        start_time = time.time()
+    while time.time() - start_time < WATCH_SECONDS:
+        check_in_flight(states, config)   # stops the flight if unsafe
+        t = time.time() - start_time
+        print(
+            f"t={t:4.1f}s  x={state['x']:.3f}  "
+            f"y={state['y']:.3f}  z={state['z']:.3f}"
+        )
+        time.sleep(PRINT_PERIOD)
 
-        while time.time() - start_time < WATCH_SECONDS:
-            t = time.time() - start_time
-            print(
-                f"t={t:4.1f}s  x={state['x']:.3f}  "
-                f"y={state['y']:.3f}  z={state['z']:.3f}"
-            )
-            time.sleep(PRINT_PERIOD)
+    # Simple verdict: is the drone near the height we asked for?
+    if abs(state["z"] - config["height"]) < 0.1:
+        print(f"PASS: hovering at z={state['z']:.3f} m "
+              f"(target {config['height']} m).")
+    else:
+        print(f"CHECK: z={state['z']:.3f} m is more than 0.1 m "
+              f"from the target {config['height']} m.")
 
-        # Simple verdict: is the drone near the height we asked for?
-        if abs(state["z"] - config["height"]) < 0.1:
-            print(f"PASS: hovering at z={state['z']:.3f} m "
-                  f"(target {config['height']} m).")
-        else:
-            print(f"CHECK: z={state['z']:.3f} m is more than 0.1 m "
-                  f"from the target {config['height']} m.")
-
-    finally:
-        sensors.stop_all(log_configs)
 
 
 def main():

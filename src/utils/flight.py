@@ -5,6 +5,8 @@ Every script flies the same way:
     connect -> take off -> do its mission -> land -> disconnect
 fly_safely() does all of that, and puts the landing inside a `finally:`
 block, so the drones land even if the mission crashes or you press Ctrl-C.
+If safety.py raises EmergencyStop (drone outside the arena or flying away),
+the motors are cut immediately instead of trying to land.
 
 Used by: every sanity test (src/tests/) and every experiment
 (src/experiments/). Scripts should call fly_safely() rather than
@@ -14,7 +16,8 @@ calling takeoff/land themselves.
 import time
 
 from src.utils.connection import connect_all, disconnect_all
-from src.utils.safety import preflight_check
+from src.utils import sensors
+from src.utils.safety import preflight_check, watch, EmergencyStop
 
 
 def set_armed(scf, armed):
@@ -33,11 +36,12 @@ def set_armed(scf, armed):
         scf.cf.platform.send_arming_request(armed)
 
 
-def takeoff_all(drones, config):
+def takeoff_all(drones, states, config):
     """
     Send a takeoff command to every drone and wait until they are hovering.
 
     Input:  drones — list from connect_all()
+            states — live telemetry (from sensors.start_all), for safety checks
             config — dictionary from load_config() (uses height, takeoff_time)
     Output: none.
 
@@ -54,8 +58,9 @@ def takeoff_all(drones, config):
         # High-level commander: the drone plans its own smooth climb.
         scf.cf.high_level_commander.takeoff(config["height"], config["takeoff_time"])
 
-    # Wait for the climb to finish, plus 1 s to settle.
-    time.sleep(config["takeoff_time"] + 1.0)
+    # Wait for the climb to finish, plus 1 s to settle — checking safety
+    # the whole time, so a drone that flies off is stopped straight away.
+    watch(states, config, config["takeoff_time"] + 1.0)
     print("Hovering.")
 
 
@@ -120,33 +125,48 @@ def fly_safely(config, n_drones, mission):
 
     Input:  config   — dictionary from load_config()
             n_drones — how many drones to use (1 or 3)
-            mission  — a function you write, taking (drones, config).
-                       It runs while the drones are hovering. Whatever it
-                       returns is passed back to the caller.
+            mission  — a function you write, taking (drones, config, states).
+                       It runs while the drones are hovering. `states` is
+                       the live telemetry (states[0]["x"] = CF1's x, ...).
+                       Whatever it returns is passed back to the caller.
     Output: the mission's return value.
 
     Example (from a test script):
-        def hover(drones, config):
-            time.sleep(3)
+        def hover(drones, config, states):
+            watch(states, config, 3)   # like sleep(3), but with safety checks
         fly_safely(config, 1, hover)
 
     Called from: main() in every test and experiment.
     """
     drones = connect_all(config, n_drones)
+    log_configs = []
+    took_off = False     # becomes True once takeoff has been commanded
+    emergency = False    # becomes True if the motors were cut
 
-    # Check positions BEFORE arming. If this fails, nothing has taken off,
-    # so we only need to disconnect.
     try:
-        preflight_check(drones, config)
-    except Exception:
-        disconnect_all(drones)
+        # One telemetry stream per drone for the whole flight.
+        states, log_configs = sensors.start_all(drones, config["log_period_ms"])
+        sensors.wait_for_data(states)
+
+        # Check positions BEFORE arming. If this fails, nothing takes off.
+        preflight_check(drones, states, config)
+
+        took_off = True
+        takeoff_all(drones, states, config)
+        return mission(drones, config, states)
+
+    except EmergencyStop as error:
+        # Position estimate looks broken: do NOT try to fly anywhere.
+        print(f"\n{error}\nCutting motors!")
+        emergency = True
+        stop_motors(drones)
         raise
 
-    try:
-        takeoff_all(drones, config)
-        return mission(drones, config)
-
     finally:
-        # This block runs no matter what: normal finish, error, or Ctrl-C.
-        land_all(drones, config)
+        # Runs no matter what: normal finish, error, or Ctrl-C.
+        if took_off and not emergency:
+            land_all(drones, config)
+        stop_motors(drones)   # motors off + disarm (harmless if already off)
+        sensors.stop_all(log_configs)
         disconnect_all(drones)
+

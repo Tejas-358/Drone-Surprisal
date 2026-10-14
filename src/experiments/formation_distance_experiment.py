@@ -29,7 +29,6 @@ import time
 
 from src.utils.connection import load_config
 from src.utils.flight import fly_safely
-from src.utils import sensors
 from src.utils.safety import check_in_flight
 from src.controllers.formation_controller import formation_step
 # Reuse the start-line and CSV helpers from the convoy experiment
@@ -40,64 +39,59 @@ from src.experiments.convoy_baseline_experiment import fly_to_start_line, save_c
 DEFAULT_CONFIG = "config/experiments/formation_distance.yaml"
 
 
-def run_formation(drones, config):
+def run_formation(drones, config, states):
     """
     The control loop for E3.
 
     Input:  drones — list of 3 connected, hovering drones (from fly_safely)
             config — default.yaml + formation_distance.yaml settings
+            states — live telemetry from fly_safely (states[0] = CF1)
     Output: list of rows (one per control step), each a dictionary of the
             values to save in the CSV.
 
     Called from: fly_safely() (as the 'mission'), via main().
     """
-    states, log_configs = sensors.start_all(drones, config["log_period_ms"])
     rows = []
 
-    try:
-        sensors.wait_for_data(states)
-        fly_to_start_line(drones, config)
+    fly_to_start_line(drones, states, config)
 
-        print("Starting formation controller...")
-        start_time = time.time()
+    print("Starting formation controller...")
+    start_time = time.time()
 
-        while True:
-            t = time.time() - start_time
-            if t >= config["duration"]:
-                break
+    while True:
+        t = time.time() - start_time
+        if t >= config["duration"]:
+            break
 
-            # Abort (-> land) if a drone left the arena or its data is stale.
-            check_in_flight(states, config)
+        # Stop the flight if a drone left the arena, flies away or its data is stale.
+        check_in_flight(states, config)
 
-            # Latest x of CF1, CF2, CF3.
-            x = [s["x"] for s in states]
+        # Latest x of CF1, CF2, CF3.
+        x = [s["x"] for s in states]
 
-            step = formation_step(x[0], x[1], x[2], config)
-            targets = [step["target1"], step["target2"], step["target3"]]
+        step = formation_step(x[0], x[1], x[2], config)
+        targets = [step["target1"], step["target2"], step["target3"]]
 
-            # go_to(x, y, z, yaw, duration): fly to the new target over one
-            # control period, so the drone arrives just as the next step starts.
-            for scf, target_x in zip(drones, targets):
-                scf.cf.high_level_commander.go_to(target_x, 0.0, config["height"],
-                                                  0.0, config["control_period"])
+        # go_to(x, y, z, yaw, duration): fly to the new target over one
+        # control period, so the drone arrives just as the next step starts.
+        for scf, target_x in zip(drones, targets):
+            scf.cf.high_level_commander.go_to(target_x, 0.0, config["height"],
+                                              0.0, config["control_period"])
 
-            rows.append({
-                "t": t,
-                "x1": x[0], "x2": x[1], "x3": x[2],
-                "gap_12": x[1] - x[0],
-                "gap_23": x[2] - x[1],
-                "S12": step["S12"], "S23": step["S23"], "U": step["U"],
-                "step1": step["step1"], "step2": step["step2"], "step3": step["step3"],
-                "target1": targets[0], "target2": targets[1], "target3": targets[2],
-            })
+        rows.append({
+            "t": t,
+            "x1": x[0], "x2": x[1], "x3": x[2],
+            "gap_12": x[1] - x[0],
+            "gap_23": x[2] - x[1],
+            "S12": step["S12"], "S23": step["S23"], "U": step["U"],
+            "step1": step["step1"], "step2": step["step2"], "step3": step["step3"],
+            "target1": targets[0], "target2": targets[1], "target3": targets[2],
+        })
 
-            print(f"t={t:5.1f}s  gaps=[{x[1] - x[0]:.3f} {x[2] - x[1]:.3f}]  "
-                  f"U={step['U']:.5f}")
+        print(f"t={t:5.1f}s  gaps=[{x[1] - x[0]:.3f} {x[2] - x[1]:.3f}]  "
+              f"U={step['U']:.5f}")
 
-            time.sleep(config["control_period"])
-
-    finally:
-        sensors.stop_all(log_configs)
+        time.sleep(config["control_period"])
 
     return rows
 

@@ -39,8 +39,7 @@ from datetime import datetime
 
 from src.utils.connection import load_config
 from src.utils.flight import fly_safely
-from src.utils import sensors
-from src.utils.safety import check_in_flight
+from src.utils.safety import check_in_flight, watch
 from src.controllers.convoy_controller import leader_command, follower_command, clamp
 
 
@@ -71,11 +70,12 @@ def send_velocity(scf, vx, state, config):
     scf.cf.commander.send_velocity_world_setpoint(vx, vy, vz, 0.0)
 
 
-def fly_to_start_line(drones, config):
+def fly_to_start_line(drones, states, config):
     """
     Move the hovering drones to their starting x positions (a line along x).
 
     Input:  drones — list of 3 connected, hovering drones
+            states — live telemetry, for safety checks while flying there
             config — uses start_x, height, formation_time
     Output: none.
 
@@ -86,15 +86,16 @@ def fly_to_start_line(drones, config):
         # go_to(x, y, z, yaw, duration): high-level "fly to this point" command
         scf.cf.high_level_commander.go_to(x, 0.0, config["height"], 0.0,
                                           config["formation_time"])
-    time.sleep(config["formation_time"] + 1.0)   # +1 s to settle
+    watch(states, config, config["formation_time"] + 1.0)   # +1 s to settle
 
 
-def run_convoy(drones, config, use_surprise, rows):
+def run_convoy(drones, config, states, use_surprise, rows):
     """
     The control loop shared by E1 and E2.
 
     Input:  drones       — list of 3 connected, hovering drones (from fly_safely)
             config       — default.yaml + convoy settings
+            states       — live telemetry from fly_safely (states[0] = CF1)
             use_surprise — False for E2 (baseline), True for E1 (gated)
             rows         — an empty list; one dictionary per control step is
                            appended to it. (Passed in, rather than returned,
@@ -104,11 +105,8 @@ def run_convoy(drones, config, use_surprise, rows):
     Called from: fly_safely() (as the 'mission'), via main() here or in
     surprise_minimization_experiment.py.
     """
-    states, log_configs = sensors.start_all(drones, config["log_period_ms"])
-
     try:
-        sensors.wait_for_data(states)
-        fly_to_start_line(drones, config)
+        fly_to_start_line(drones, states, config)
 
         print("Starting convoy control loop...")
         leader_stopped = False
@@ -121,7 +119,7 @@ def run_convoy(drones, config, use_surprise, rows):
             if t >= config["duration"]:
                 break
 
-            # Abort (-> land) if a drone left the arena, data is stale, or
+            # Stop the flight if a drone left the arena, flies away, data is stale, or
             # two drones are too close. min_gap_abort is optional in the config.
             check_in_flight(states, config, config.get("min_gap_abort"))
 
@@ -185,7 +183,6 @@ def run_convoy(drones, config, use_surprise, rows):
                 scf.cf.commander.send_velocity_world_setpoint(0.0, 0.0, 0.0, 0.0)
             except Exception:
                 pass
-        sensors.stop_all(log_configs)
 
 
 def save_csv(rows, config, experiment_name):
@@ -234,7 +231,9 @@ def run_experiment(experiment_name, use_surprise):
     rows = []
     try:
         fly_safely(config, 3,
-                   lambda drones, cfg: run_convoy(drones, cfg, use_surprise, rows))
+                   lambda drones, cfg, states: run_convoy(drones, cfg, states,
+                                                          use_surprise, rows))
+
     finally:
         # Save whatever was recorded, even if the run was aborted.
         if rows:
