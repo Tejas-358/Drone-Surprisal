@@ -9,7 +9,7 @@ Standalone two-drone planar simulation:
 - CSV logging and comparison plots
 
 Run:
-    python surprisal_euler_lagrange_sim.py
+    python -m src.simulation.surprisal_euler_lagrange_sim
 
 This is a simplified point-mass simulation, NOT CrazySim/Gazebo.
 """
@@ -49,7 +49,7 @@ MAX_STIFFNESS = 3.0           # N/m
 MAX_CONTROL_FORCE = 0.18      # Newtons
 MAX_SPEED = 1.0               # m/s
 
-OUTPUT_DIR = Path("surprisal_sim_outputs")
+OUTPUT_DIR = Path("data/simulation/euler_lagrange")
 
 
 # ============================================================

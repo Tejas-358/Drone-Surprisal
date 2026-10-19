@@ -5,8 +5,8 @@ Every script flies the same way:
     connect -> take off -> do its mission -> land -> disconnect
 fly_safely() does all of that, and puts the landing inside a `finally:`
 block, so the drones land even if the mission crashes or you press Ctrl-C.
-If safety.py raises EmergencyStop (drone outside the arena or flying away),
-the motors are cut immediately instead of trying to land.
+If safety.py raises EmergencyStop (a drone outside the arena or flying away),
+THAT drone's motors are cut immediately; the other drones still land.
 
 Used by: every sanity test (src/tests/) and every experiment
 (src/experiments/). Scripts should call fly_safely() rather than
@@ -90,24 +90,21 @@ def takeoff_all(drones, states, config):
     print(f"Taking off to {config['height']} m...")
 
     for scf in drones:
+        # The previous flight ended with a low-level "stop" command. Until we
+        # say "low-level is finished", the firmware IGNORES high-level
+        # commands like takeoff() — the drone stays on the floor although it
+        # is armed. (This is why drones used to need a reset between runs.)
+        scf.cf.commander.send_notify_setpoint_stop()
+
         # High-level commander: the drone plans its own smooth climb.
         scf.cf.high_level_commander.takeoff(config["height"], config["takeoff_time"])
 
-    # Part-way through the climb every drone should be off the floor. One
-    # still on the floor most likely missed the takeoff command on the busy
-    # radio: send it again. (We wait 40% of takeoff_time, because the climb
-    # starts slowly — with a long takeoff_time z barely changes at first.)
-    watch(states, config, max(1.0, 0.4 * config["takeoff_time"]))
-
-    for i, (scf, state) in enumerate(zip(drones, states)):
-        if state["z"] < 0.05:
-            print(f"CF{i + 1} has not started climbing — resending takeoff.")
-            scf.cf.high_level_commander.takeoff(config["height"], config["takeoff_time"])
+    # All drones got the takeoff command at the same moment above, so they
+    # climb together.
 
     # Wait for the climb to finish, plus 1 s to settle — checking safety
     # the whole time, so a drone that flies off is stopped straight away.
     watch(states, config, config["takeoff_time"] + 1.0)
-
 
     # Did every drone really leave the ground? If one is still down, stop
     # here (the others get landed) instead of flying an incomplete group.
@@ -119,11 +116,12 @@ def takeoff_all(drones, states, config):
     print("Hovering.")
 
 
-def land_all(drones, config):
+def land_all(drones, states, config):
     """
     Land every drone safely, then switch the motors off.
 
-    Input:  drones — list from connect_all()
+    Input:  drones — list of drones to land
+            states — their live telemetry (same order), to see when they touch down
             config — dictionary from load_config() (uses land_time)
     Output: none.
 
@@ -147,8 +145,15 @@ def land_all(drones, config):
         except Exception as error:
             print(f"Land command failed on one drone: {error}")
 
-    # Wait for the descent to finish, plus 1 s to touch down.
-    time.sleep(config["land_time"] + 1.0)
+    # Wait until every drone is really on the floor (z below 10 cm) before
+    # cutting its motors — cutting earlier would drop it. Give up after
+    # land_time + 3 s (e.g. if a drone's data stopped arriving).
+    end = time.time() + config["land_time"] + 3.0
+    while time.time() < end:
+        if all(s.get("z", 0.0) < 0.1 for s in states):
+            break
+        time.sleep(0.1)
+    time.sleep(0.5)   # let it settle on the floor
 
     stop_motors(drones)
     print("Landed.")
@@ -194,9 +199,10 @@ def fly_safely(config, n_drones, mission):
     Called from: main() in every test and experiment.
     """
     drones = connect_all(config, n_drones)
+    states = []
     log_configs = []
     took_off = False     # becomes True once takeoff has been commanded
-    emergency = False    # becomes True if the motors were cut
+    cut = None           # index of a drone whose motors were cut in an emergency
 
     try:
         # One telemetry stream per drone for the whole flight.
@@ -211,16 +217,20 @@ def fly_safely(config, n_drones, mission):
         return mission(drones, config, states)
 
     except EmergencyStop as error:
-        # Position estimate looks broken: do NOT try to fly anywhere.
-        print(f"\n{error}\nCutting motors!")
-        emergency = True
-        stop_motors(drones)
+        # This drone's position looks broken: do NOT try to fly it anywhere.
+        # Cut ONLY its motors; the other drones are landed normally below.
+        print()
+        print(error)
+        print(f"Cutting motors of CF{error.drone + 1}!")
+        cut = error.drone
+        stop_motors([drones[cut]])
         raise
 
     finally:
         # Runs no matter what: normal finish, error, or Ctrl-C.
-        if took_off and not emergency:
-            land_all(drones, config)
+        if took_off:
+            keep = [i for i in range(len(drones)) if i != cut]
+            land_all([drones[i] for i in keep], [states[i] for i in keep], config)
         stop_motors(drones)   # motors off + disarm (harmless if already off)
         sensors.stop_all(log_configs)
         disconnect_all(drones)

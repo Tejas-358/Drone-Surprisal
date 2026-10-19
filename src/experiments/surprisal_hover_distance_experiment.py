@@ -1,9 +1,11 @@
-
 """
-surprisal_hover_distance_real.py
+surprisal_hover_distance_experiment.py — two Crazyflies hover and keep the
+separation they had at the start. When one is displaced, the other (the
+"responder") moves to restore the distance.
 
-Two Crazyflies hover and maintain their initial separation.
-The drone that appears less displaced becomes the responder.
+Run from the Drone-Surprisal repository root:
+    sim:   python -m src.experiments.surprisal_hover_distance_experiment --mode sim
+    real:  python -m src.experiments.surprisal_hover_distance_experiment --mode real
 
 Safety:
 - Test in CrazySim first.
@@ -11,6 +13,7 @@ Safety:
 - This is an experimental controller, not a collision-prevention guarantee.
 """
 
+import argparse
 import time
 import csv
 from pathlib import Path
@@ -19,6 +22,7 @@ import numpy as np
 
 from src.utils.connection import load_config
 from src.utils.flight import fly_safely
+from src.utils.safety import check_in_flight
 
 
 # ----------------------- Experiment settings -----------------------
@@ -57,7 +61,8 @@ MAX_DISPLACEMENT = 0.80
 CONTROL_DT = 0.05
 MAX_DURATION = 45.0
 
-LOG_PATH = Path("data/raw/surprisal_hover_distance_real.csv")
+# One new file per run (mode + timestamp in the name), so runs never overwrite.
+LOG_DIR = Path("data/raw")
 
 
 # ----------------------- Small helpers ----------------------------
@@ -165,7 +170,9 @@ def mission(drones, config, states):
     previous_time = time.monotonic()
     start_time = previous_time
 
-    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    LOG_PATH = LOG_DIR / f"surprisal_hover_distance_{config['mode']}_{stamp}.csv"
 
     with LOG_PATH.open("w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
@@ -189,6 +196,9 @@ def mission(drones, config, states):
                 now = time.monotonic()
                 dt = max(now - previous_time, 1e-3)
                 previous_time = now
+
+                # Shared safety check: arena, fly-away speed, stale data.
+                check_in_flight(states, config)
 
                 p1, p2 = get_positions()
 
@@ -322,8 +332,16 @@ def mission(drones, config, states):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["sim", "real"],
+                        help="override mode in config/default.yaml")
+    args = parser.parse_args()
+
     config = load_config()
+    if args.mode:
+        config["mode"] = args.mode
     fly_safely(config, NUM_DRONES, mission)
+
 
 
 if __name__ == "__main__":

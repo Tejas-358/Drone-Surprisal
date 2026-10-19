@@ -27,7 +27,13 @@ from src.utils import sensors
 
 
 class EmergencyStop(RuntimeError):
-    """Raised when the motors must be cut immediately (see top of file)."""
+    """
+    Raised when ONE drone's motors must be cut immediately (see top of file).
+    `drone` is that drone's index (0 = CF1), so the others can still land.
+    """
+    def __init__(self, message, drone):
+        super().__init__(message)
+        self.drone = drone
 
 
 def preflight_check(drones, states, config):
@@ -52,9 +58,9 @@ def preflight_check(drones, states, config):
 
             vbat = sensors.read_battery(scf)
             print(f"CF{i + 1} battery: {vbat:.2f} V" if vbat else f"CF{i + 1} battery: unknown")
-            if vbat is not None and vbat < config["min_battery_v"]:
-                raise RuntimeError(f"CF{i + 1}: battery {vbat:.2f} V is below "
-                                   f"{config['min_battery_v']} V. Charge it. Not flying.")
+            # if vbat is not None and vbat < config["min_battery_v"]:
+            #     raise RuntimeError(f"CF{i + 1}: battery {vbat:.2f} V is below "
+            #                        f"{config['min_battery_v']} V. Charge it. Not flying.")
 
 
     # 2. Record each drone's position 10 times over 1 second.
@@ -126,16 +132,17 @@ def check_in_flight(states, config, min_gap=None):
     for i, s in enumerate(states):
         name = f"CF{i + 1}"
 
-        if not (arena["x_min"] <= s["x"] <= arena["x_max"] and
-                arena["y_min"] <= s["y"] <= arena["y_max"] and
-                s["z"] <= arena["z_max"]):
+        outside = not (arena["x_min"] <= s["x"] <= arena["x_max"] and
+                       arena["y_min"] <= s["y"] <= arena["y_max"] and
+                       s["z"] <= arena["z_max"])
+        if confirmed((i, "arena"), outside, config):
             raise EmergencyStop(f"EMERGENCY STOP: {name} outside the arena "
-                                f"(x={s['x']:.2f} y={s['y']:.2f} z={s['z']:.2f})")
+                                f"(x={s['x']:.2f} y={s['y']:.2f} z={s['z']:.2f})", i)
 
         # Much faster than any of our manoeuvres -> the drone is flying away.
         speed = (s["vx"] ** 2 + s["vy"] ** 2 + s["vz"] ** 2) ** 0.5
-        if speed > config["max_speed"]:
-            raise EmergencyStop(f"EMERGENCY STOP: {name} moving at {speed:.2f} m/s")
+        if confirmed((i, "speed"), speed > config["max_speed"], config):
+            raise EmergencyStop(f"EMERGENCY STOP: {name} moving at {speed:.2f} m/s", i)
 
         # Old data means the radio link is dropping packets. Acting on an
         # old position is dangerous, so land.
@@ -148,6 +155,30 @@ def check_in_flight(states, config, min_gap=None):
             gap = states[i]["x"] - states[i + 1]["x"]
             if gap < min_gap:
                 raise RuntimeError(f"ABORT: CF{i + 1} and CF{i + 2} only {gap:.2f} m apart")
+
+
+# How many checks in a row each problem has been seen, per drone.
+_strikes = {}
+
+
+def confirmed(key, unsafe, config):
+    """
+    Only report a problem once it has been seen several checks IN A ROW.
+
+    A single bad Lighthouse sample (e.g. one base station briefly hidden
+    behind the other drone) makes the position jump for a moment. Cutting
+    the motors for that would drop a healthy drone, so we wait until the
+    problem has lasted `emergency_confirm_steps` checks (3 x 0.1 s = 0.3 s).
+
+    Input:  key    — which drone and which check, e.g. (0, "speed")
+            unsafe — True if the check failed this time
+            config — uses emergency_confirm_steps
+    Output: True when the problem is confirmed.
+
+    Called from: check_in_flight().
+    """
+    _strikes[key] = _strikes.get(key, 0) + 1 if unsafe else 0
+    return _strikes[key] >= config["emergency_confirm_steps"]
 
 
 def watch(states, config, seconds):

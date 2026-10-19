@@ -1,0 +1,54 @@
+# ============================================================
+# surprisal_goal_navigation.yaml — settings for the two-drone
+# surprisal distance experiment
+# (src/experiments/surprisal_goal_navigation_experiment.py).
+#
+# The idea of one run:
+#   Two drones start FARTHER apart than desired_distance. While their
+#   midpoint flies to a goal, each drone corrects the separation error.
+#   We compare two controllers on the same task:
+#     fixed    — constant gain base_kp                     (BASELINE)
+#     adaptive — gain grows with surprisal                 (PROPOSED)
+#   (choose with --controller on the command line)
+#
+# Loaded on top of config/default.yaml (height, URIs, arena, ...).
+# ============================================================
+
+# --- Placement -------------------------------------------------------
+# No fixed start spots (no `start_x`), so the pre-flight check does not
+# test placement. Just place the drones:
+#   - about 0.8 m apart (more than desired_distance, so there is a gap to close);
+#   - roughly along the x axis, so neither drone hides a base station from
+#     the other (the base stations sit at y = -3.2 and y = +3.0).
+# The experiment prints a warning if either is not the case.
+
+# --- Separation -------------------------------------------------------
+desired_distance: 0.60   # m, the separation the controller should hold
+distance_tolerance: 0.05 # m, "settled" means |error| stays below this
+protective_distance: 0.40  # m, below this the drones are pushed apart first
+critical_distance: 0.30    # m, below this the run is aborted and both land
+
+# --- Controller -----------------------------------------------------
+base_kp: 0.25            # gain used by BOTH controllers when surprisal is 0
+surprise_gain: 1.5       # adaptive only: how fast the gain grows with surprisal
+max_kp: 0.60             # adaptive only: upper limit of the gain
+sigma_distance: 0.10     # m, error size that counts as "expected" noise
+kd_relative: 0.25        # damping on how fast the separation changes
+separation_recovery_gain: 0.50   # strength of the protective push-apart
+
+# --- Formation goal ---------------------------------------------------
+goal_offset: [0.5, 0.0]  # m, the midpoint moves this far (x, y) from its start
+goal_kp: 0.20
+max_goal_speed: 0.08     # m/s
+goal_tolerance: 0.08     # m
+
+# --- Flight limits -----------------------------------------------------
+max_horizontal_speed: 0.10   # m/s, per drone
+altitude_kp: 0.50
+max_vertical_speed: 0.08     # m/s
+min_altitude: 0.20           # m, abort below this during the run
+max_altitude: 0.80           # m, abort above this during the run
+
+# --- Timing -----------------------------------------------------------
+duration: 30.0           # s, length of the controlled part (always the full time)
+control_period: 0.1      # s (10 Hz)
