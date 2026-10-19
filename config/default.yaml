@@ -24,16 +24,16 @@ uris:
   real:
     # [FILL IN] your radio addresses, e.g. radio://0/80/2M/E7E7E7E7E1
     - radio://0/80/2M/E7E7E7E7E6
-    - radio://0/80/2M/E7E7E7E7E7
     - radio://0/80/2M/E7E7E7E7E5
+    - radio://0/80/2M/E7E7E7E7E7
 
 # Folder where CFLib stores the drone's parameter/log tables.
 cache_dir: ./cache
 
 # --- Flight -----------------------------------------------------
-height: 0.4            # m, hover altitude after takeoff
+height: 0.4           # m, hover altitude after takeoff
 takeoff_time: 5.0      # s, how long the takeoff manoeuvre takes
-land_time: 10.0         # s, how long the landing manoeuvre takes
+land_time: 5.0         # s, how long the landing manoeuvre takes
 
 # --- Telemetry --------------------------------------------------
 log_period_ms: 100     # how often the drone sends its state (100 ms = 10 Hz)

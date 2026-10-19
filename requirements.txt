@@ -16,3 +16,8 @@ pyyaml
 
 # Analysis packages (numpy, pandas, matplotlib) will be added when the
 # analysis/ scripts are written.
+pandas 
+
+numpy
+
+matplotlib

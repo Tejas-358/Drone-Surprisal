@@ -10,3 +10,7 @@ cache/
 
 # Local virtual environment
 venv/
+
+.agent/
+
+.vscode/

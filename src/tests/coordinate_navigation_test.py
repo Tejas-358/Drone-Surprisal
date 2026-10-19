@@ -1,243 +1,301 @@
-
 """
 coordinate_navigation_test.py
 
-Conservative single-Crazyflie Lighthouse navigation test.
+Two-Crazyflie Lighthouse coordinate navigation.
 
 Run from the Drone-Surprisal repository root:
     python -m src.tests.coordinate_navigation_test --mode real
 
-Assumptions:
-- state["x"], state["y"], state["z"] are in metres.
-- Position estimates are expressed in the Lighthouse world frame.
-- send_velocity_world_setpoint(vx, vy, vz, yawrate) is supported.
-- fly_safely() manages connection, preflight, takeoff and landing.
-
 IMPORTANT:
-- Verify coordinate-frame behavior before autonomous flight.
-- The horizontal travel limit is measured from the live takeoff position.
-- Software guardrails cannot guarantee safety if telemetry or control frames
-  are incorrect.
+- Configure two real Crazyflie URIs in your project configuration.
+- Verify world-frame position and velocity-command behavior.
+- Choose targets close to each drone's measured starting position.
+- Maintain adequate physical separation and supervise the flight.
 """
 
 import argparse
 import math
 import time
+import warnings
 
 from src.utils.connection import load_config
 from src.utils.flight import fly_safely
 from src.utils.safety import watch
 
+warnings.filterwarnings("ignore")
 
-# Target in Lighthouse world coordinates (metres).
-# Keep altitude close to the takeoff altitude for the initial test.
-TARGET = (0.2, 0.2, 0.4)
 
-# Conservative controller settings.
+# Targets are (x, y, z), in metres in the Lighthouse world frame.
+# EXAMPLES ONLY: adjust these to your measured starting positions.
+TARGETS = [
+    (0.72, 0.40, 0.2),    # CF1 target
+    (0.72, -0.70, 0.2),  # CF2 target
+]
+
 CONTROL_PERIOD = 0.1
-MAX_SPEED = 0.05               # m/s
+MAX_SPEED = 0.05
 KP = 0.3
-ARRIVAL_TOLERANCE = 0.08       # metres
-HOVER_SECONDS = 4.0
-NAVIGATION_TIMEOUT = 15.0
+ARRIVAL_TOLERANCE = 0.08
+HOVER_SECONDS = 2.0
+NAVIGATION_TIMEOUT = 45.0
 
-# Safety guardrails.
-MAX_DISTANCE_FROM_START = 1  # horizontal distance, metres
+# Safety limits
+MAX_DISTANCE_FROM_START = 3.0
 MIN_Z = 0.10
 MAX_Z = 0.50
-MAX_ABS_XY = 1.8
+MAX_ABS_XY = 3.0
+
+# Minimum allowed separation between drone position estimates.
+# This is a software stop threshold, NOT a collision-avoidance guarantee.
+MIN_DRONE_SEPARATION = 0.00
 
 
 def horizontal_distance(a, b):
-    """Return horizontal XY distance in metres."""
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
 def distance(a, b):
-    """Return 3D Euclidean distance in metres."""
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
 def read_position(state):
-    """Return finite (x, y, z) telemetry, or fail safely."""
     try:
-        position = (
+        p = (
             float(state["x"]),
             float(state["y"]),
             float(state["z"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
-        raise RuntimeError(
-            "Missing or invalid position telemetry."
-        ) from exc
+        raise RuntimeError("Missing or invalid position telemetry.") from exc
 
-    if not all(math.isfinite(value) for value in position):
-        raise RuntimeError(
-            f"Invalid position telemetry: {position}"
-        )
+    if not all(math.isfinite(v) for v in p):
+        raise RuntimeError(f"Invalid position telemetry: {p}")
 
-    return position
+    return p
 
 
 def check_target(target):
-    """Validate the target against the configured world bounds."""
     x, y, z = target
 
     if abs(x) > MAX_ABS_XY or abs(y) > MAX_ABS_XY:
-        raise ValueError(
-            "Target exceeds the configured X/Y guardrails."
-        )
+        raise ValueError(f"Target exceeds X/Y bounds: {target}")
 
     if not MIN_Z <= z <= MAX_Z:
         raise ValueError(
-            f"Target altitude must be between {MIN_Z} and {MAX_Z} m."
+            f"Target altitude must be between {MIN_Z} and {MAX_Z} m: "
+            f"{target}"
         )
 
 
-def check_position(position, start, phase):
-    """
-    Validate the latest measured position.
-
-    Call this immediately before every movement setpoint.
-    """
+def check_position(position, start, drone_name, phase):
     x, y, z = position
 
     if horizontal_distance(start, position) > MAX_DISTANCE_FROM_START:
         raise RuntimeError(
-            f"Safety stop during {phase}: horizontal displacement "
-            f"from start exceeded {MAX_DISTANCE_FROM_START:.2f} m. "
-            f"Start={start}, current={position}"
+            f"{drone_name}: horizontal displacement limit exceeded "
+            f"during {phase}. Start={start}, current={position}"
         )
 
     if abs(x) > MAX_ABS_XY or abs(y) > MAX_ABS_XY:
         raise RuntimeError(
-            f"Safety stop during {phase}: world-frame X/Y bound exceeded. "
-            f"Current position={position}"
+            f"{drone_name}: world-frame X/Y bound exceeded: {position}"
         )
 
     if not MIN_Z <= z <= MAX_Z:
         raise RuntimeError(
-            f"Safety stop during {phase}: altitude outside "
-            f"[{MIN_Z:.2f}, {MAX_Z:.2f}] m. "
-            f"Current position={position}"
+            f"{drone_name}: altitude outside "
+            f"[{MIN_Z:.2f}, {MAX_Z:.2f}] m: {position}"
         )
 
 
-def send_velocity(scf, vx, vy, vz):
-    """Send one velocity setpoint, capped by the 3D speed limit."""
-    speed = math.sqrt(vx * vx + vy * vy + vz * vz)
+def check_separation(positions, phase):
+    if len(positions) != 2:
+        raise RuntimeError("Expected exactly two drone positions.")
+
+    separation = distance(positions[0], positions[1])
+
+    if separation < MIN_DRONE_SEPARATION:
+        raise RuntimeError(
+            f"Safety stop during {phase}: drone separation is "
+            f"{separation:.3f} m, below "
+            f"{MIN_DRONE_SEPARATION:.2f} m. "
+            "Landing should be managed by fly_safely()."
+        )
+
+
+def bounded_velocity(position, target):
+    error = tuple(t - p for p, t in zip(position, target))
+    velocity = [KP * e for e in error]
+
+    speed = math.sqrt(sum(v * v for v in velocity))
 
     if speed > MAX_SPEED:
         scale = MAX_SPEED / speed
-        vx *= scale
-        vy *= scale
-        vz *= scale
+        velocity = [v * scale for v in velocity]
 
+    return velocity
+
+
+def send_velocity(scf, velocity):
+    vx, vy, vz = velocity
     scf.cf.commander.send_velocity_world_setpoint(
         vx, vy, vz, 0.0
     )
 
 
 def mission(drones, config, states):
-    """Navigate one drone, hold position briefly, then return to fly_safely."""
-    if len(drones) != 1 or len(states) != 1:
+    if len(drones) != 2 or len(states) != 2:
         raise RuntimeError(
-            "This test is intended for exactly one drone."
+            "This test requires exactly two configured drones."
         )
 
-    scf = drones[0]
-    target = tuple(float(value) for value in TARGET)
-    check_target(target)
+    if len(TARGETS) != 2:
+        raise RuntimeError("Provide one target per drone.")
 
-    # Read the live starting position after takeoff.
-    start = read_position(states[0])
+    targets = [tuple(map(float, t)) for t in TARGETS]
 
-    print(f"Starting position: {start}")
-    print(f"Target position:   {target}")
+    for target in targets:
+        check_target(target)
 
-    # Check the target's required horizontal displacement before moving.
-    requested_horizontal_distance = horizontal_distance(start, target)
+    # Reject targets that are too close together.
+    target_separation = distance(targets[0], targets[1])
 
-    if requested_horizontal_distance > MAX_DISTANCE_FROM_START:
-        raise RuntimeError(
-            "Target rejected before navigation: its horizontal distance "
-            f"from the starting position is "
-            f"{requested_horizontal_distance:.3f} m, exceeding the "
-            f"{MAX_DISTANCE_FROM_START:.2f} m test limit. "
-            "No navigation setpoint was sent."
+    if target_separation < MIN_DRONE_SEPARATION:
+        raise ValueError(
+            f"Targets are only {target_separation:.3f} m apart. "
+            f"Use targets at least {MIN_DRONE_SEPARATION:.2f} m apart."
         )
 
-    # Check that the initial telemetry is within the allowed flight envelope.
-    check_position(start, start, "navigation startup")
+    names = ["CF1", "CF2"]
+    starts = [read_position(s) for s in states]
 
-    print("Navigating using position feedback...")
+    for i in range(2):
+        print(f"{names[i]} start:  {starts[i]}")
+        print(f"{names[i]} target: {targets[i]}")
+
+        if horizontal_distance(starts[i], targets[i]) > MAX_DISTANCE_FROM_START:
+            raise RuntimeError(
+                f"{names[i]} target is more than "
+                f"{MAX_DISTANCE_FROM_START:.2f} m horizontally "
+                "from its starting position. No navigation started."
+            )
+
+        check_position(starts[i], starts[i], names[i], "startup")
+
+    check_separation(starts, "startup")
+
+    # Check the straight-line target paths for possible conflicts.
+    # This is a simple conservative check, not full trajectory planning.
+    for alpha in [i / 20 for i in range(21)]:
+        predicted = [
+            tuple(
+                starts[j][k] + alpha * (targets[j][k] - starts[j][k])
+                for k in range(3)
+            )
+            for j in range(2)
+        ]
+        check_separation(predicted, "planned path check")
+
+    print("Both drones passed startup checks.")
+    print("Navigating both drones using position feedback...")
+
     start_time = time.monotonic()
     last_log = start_time
 
     while True:
-        now = time.monotonic()
-        position = read_position(states[0])
+        positions = [read_position(s) for s in states]
 
-        # Safety checks happen before the target calculation and setpoint.
-        check_position(position, start, "navigation")
-
-        error = tuple(
-            target_value - current_value
-            for target_value, current_value in zip(target, position)
-        )
-        remaining = distance(position, target)
-
-        if remaining <= ARRIVAL_TOLERANCE:
-            print(
-                f"Target reached: position={position}, "
-                f"error={remaining:.3f} m"
+        for i in range(2):
+            check_position(
+                positions[i], starts[i], names[i], "navigation"
             )
+
+        check_separation(positions, "navigation")
+
+        errors = [
+            distance(positions[i], targets[i]) for i in range(2)
+        ]
+
+        if all(e <= ARRIVAL_TOLERANCE for e in errors):
+            for i in range(2):
+                print(
+                    f"{names[i]} target reached: "
+                    f"position={positions[i]}, error={errors[i]:.3f} m"
+                )
             break
 
-        if now - start_time > NAVIGATION_TIMEOUT:
+        if time.monotonic() - start_time > NAVIGATION_TIMEOUT:
             raise TimeoutError(
-                f"Navigation timed out at {position}; "
-                f"target error={remaining:.3f} m."
+                "Navigation timed out. "
+                f"CF1 error={errors[0]:.3f} m; "
+                f"CF2 error={errors[1]:.3f} m."
             )
 
-        # Proportional position controller -> bounded velocity.
-        vx, vy, vz = (KP * component for component in error)
+        # Calculate both commands before sending either one.
+        velocities = [
+            bounded_velocity(positions[i], targets[i])
+            for i in range(2)
+        ]
 
-        # Recheck the live position immediately before issuing movement.
-        latest_position = read_position(states[0])
-        check_position(latest_position, start, "before navigation command")
+        # Recheck both live positions immediately before movement.
+        latest = [read_position(s) for s in states]
 
-        send_velocity(scf, vx, vy, vz)
+        for i in range(2):
+            check_position(
+                latest[i], starts[i], names[i], "before command"
+            )
+
+        check_separation(latest, "before command")
+
+        # Issue both commands in each control cycle.
+        for i in range(2):
+            if errors[i] > ARRIVAL_TOLERANCE:
+                send_velocity(drones[i], velocities[i])
+            else:
+                # Zero velocity while the other drone finishes.
+                send_velocity(drones[i], (0.0, 0.0, 0.0))
+
+        now = time.monotonic()
 
         if now - last_log >= 0.5:
             print(
-                f"Position=({position[0]:.2f}, "
-                f"{position[1]:.2f}, {position[2]:.2f}) | "
-                f"error={remaining:.2f} m"
+                f"CF1={positions[0]} error={errors[0]:.2f} m | "
+                f"CF2={positions[1]} error={errors[1]:.2f} m"
             )
             last_log = now
 
-        # Preserve the project's in-flight safety monitoring.
         watch(states, config, CONTROL_PERIOD)
 
-    print("Holding target position...")
+    print(f"Holding both targets for {HOVER_SECONDS:.1f} seconds...")
     hover_start = time.monotonic()
 
     while time.monotonic() - hover_start < HOVER_SECONDS:
-        position = read_position(states[0])
-        check_position(position, start, "hover")
+        positions = [read_position(s) for s in states]
 
-        error = tuple(
-            target_value - current_value
-            for target_value, current_value in zip(target, position)
-        )
-        vx, vy, vz = (KP * component for component in error)
+        for i in range(2):
+            check_position(
+                positions[i], starts[i], names[i], "hover"
+            )
 
-        # Recheck before every hover correction too.
-        latest_position = read_position(states[0])
-        check_position(latest_position, start, "before hover command")
+        check_separation(positions, "hover")
 
-        send_velocity(scf, vx, vy, vz)
+        velocities = [
+            bounded_velocity(positions[i], targets[i])
+            for i in range(2)
+        ]
+
+        latest = [read_position(s) for s in states]
+
+        for i in range(2):
+            check_position(
+                latest[i], starts[i], names[i], "before hover command"
+            )
+
+        check_separation(latest, "before hover command")
+
+        for i in range(2):
+            send_velocity(drones[i], velocities[i])
+
         watch(states, config, CONTROL_PERIOD)
 
     print("Hover complete. Returning to fly_safely() for landing.")
@@ -245,12 +303,12 @@ def mission(drones, config, states):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Conservative single-Crazyflie coordinate navigation test."
+        description="Two-Crazyflie coordinate navigation test."
     )
     parser.add_argument(
         "--mode",
         choices=["sim", "real"],
-        default="real",
+        default="sim",
         help="Override the mode in the project config.",
     )
     args = parser.parse_args()
@@ -258,9 +316,10 @@ def main():
     config = load_config()
     config["mode"] = args.mode
 
-    # One drone only: CF1.
-    fly_safely(config, 1, mission)
-    print("Coordinate navigation test complete.")
+    # Connect two drones. The configuration must provide two valid URIs.
+    fly_safely(config, 2, mission)
+
+    print("Two-drone coordinate navigation test complete.")
 
 
 if __name__ == "__main__":

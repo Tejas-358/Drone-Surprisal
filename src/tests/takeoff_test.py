@@ -19,7 +19,7 @@ from src.utils.flight import fly_safely
 from src.utils.safety import watch
 
 
-HOVER_SECONDS = 3.0   # how long to hover before landing
+HOVER_SECONDS = 2.0   # how long to hover before landing
 
 
 def hover(drones, config, states):
