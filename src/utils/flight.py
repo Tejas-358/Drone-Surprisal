@@ -159,6 +159,44 @@ def land_all(drones, states, config):
     print("Landed.")
 
 
+def fly_to_positions(drones, states, config, positions):
+    """
+    Move hovering drones to start positions WITHOUT their paths colliding.
+
+    In the simulator drones always spawn at fixed spots, and on real drones
+    hand placement is never exact, so experiments fly to their start
+    positions first. Moving everyone at the same height could make paths
+    cross, so each drone travels at its OWN height:
+        1. drone i climbs to  height + 0.25 m * i
+        2. all drones fly sideways to their (x, y)  — at different heights
+        3. all drones descend to the flight height
+
+    Input:  drones    — hovering drones (from fly_safely)
+            states    — live telemetry, for safety checks while moving
+            config    — uses height, transfer_time (s, optional, default 4)
+            positions — list of (x, y) in metres, one per drone, in order
+    Output: none.
+
+    Called from: experiments, right after takeoff.
+    """
+    height = config["height"]
+    travel = config.get("transfer_time", 4.0)
+    layers = [height + 0.25 * i for i in range(len(drones))]
+
+    print("\nFlying to start positions (each drone at its own height)...")
+    for scf, s, z in zip(drones, states, layers):              # 1. climb in place
+        scf.cf.high_level_commander.go_to(s["x"], s["y"], z, 0.0, 2.0)
+    watch(states, config, 2.5)
+
+    for scf, (x, y), z in zip(drones, positions, layers):      # 2. move sideways
+        scf.cf.high_level_commander.go_to(x, y, z, 0.0, travel)
+    watch(states, config, travel + 0.5)
+
+    for scf, (x, y) in zip(drones, positions):                 # 3. descend
+        scf.cf.high_level_commander.go_to(x, y, height, 0.0, 2.0)
+    watch(states, config, 3.0)
+
+
 def stop_motors(drones):
     """
     Cut the motors on every drone immediately.

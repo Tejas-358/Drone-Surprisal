@@ -4,23 +4,23 @@ surprise gating (the baseline that E1 is compared against).
 
 What happens in one run:
   1. Connect to 3 drones, pre-flight check, take off (done by fly_safely).
-  2. Fly into a line along x: CF1 in front, CF2 and CF3 behind.
+  2. Fly to the start line along x (CF1 in front), each drone at its own
+     height on the way so paths cannot collide.
   3. Control loop: CF1 flies towards a virtual wall and stops in front of
      it. CF2 follows CF1, CF3 follows CF2, using plain P-control (plus the
      safety repulsion) from src/controllers/convoy_controller.py.
      Every step, safety.check_in_flight() aborts if anything is unsafe.
-  4. Land and disconnect (done by fly_safely), save a CSV — also after
-     an abort, so the data up to the problem is kept.
+  4. Land (fly_safely), save CSV + JSON (also after an abort) with metrics.
 
 The control loop lives in run_convoy() so that E1
-(surprise_minimization_experiment.py) can reuse it with use_surprise=True.
-That guarantees E1 and E2 fly exactly the same way except for the gating.
+(surprise_minimization_experiment.py) reuses it with use_surprise=True.
+E1 and E2 therefore fly exactly the same way except for the gating.
 
 Run from the repo root:
-    sim  (CrazySim running with 3 drones):
-        python -m src.experiments.convoy_baseline_experiment
-    real (small arena):
-        python -m src.experiments.convoy_baseline_experiment --mode real --config config/experiments/convoy_real.yaml
+    sim:   python -m src.experiments.convoy_baseline_experiment --mode sim
+    real:  python -m src.experiments.convoy_baseline_experiment --mode real --config config/experiments/convoy_real.yaml
+    extra: --noise 0.03 --seed 1      (sim: mimic Lighthouse jitter)
+           --set noise_scale=0.1      (change one config value, e.g. for a sweep)
 """
 
 import warnings
@@ -31,15 +31,13 @@ warnings.filterwarnings(
     category=DeprecationWarning,
 )
 
-import argparse
-import csv
-import os
 import time
-from datetime import datetime
 
-from src.utils.connection import load_config
-from src.utils.flight import fly_safely
-from src.utils.safety import check_in_flight, watch
+from src.utils import cli
+from src.utils.flight import fly_safely, fly_to_positions
+from src.utils.observation import Observer
+from src.utils.run_log import save_run
+from src.utils.safety import check_in_flight
 from src.controllers.convoy_controller import leader_command, follower_command, clamp
 
 
@@ -72,24 +70,15 @@ def send_velocity(scf, vx, state, config):
 
 def fly_to_start_line(drones, states, config):
     """
-    Move the hovering drones to their starting x positions (a line along x).
+    Move the hovering drones to their start x positions (y = 0), each at
+    its own height on the way (see flight.fly_to_positions).
 
-    Input:  drones — list of 3 connected, hovering drones
-            states — live telemetry, for safety checks while flying there
-            config — uses start_x, height, formation_time
-    Output: none.
-
-    Called from: run_convoy(), before the control loop starts.
+    Called from: run_convoy() here and formation_distance_experiment.py.
     """
-    print("\nFlying to start line...")
-    for scf, x in zip(drones, config["start_x"]):
-        # go_to(x, y, z, yaw, duration): high-level "fly to this point" command
-        scf.cf.high_level_commander.go_to(x, 0.0, config["height"], 0.0,
-                                          config["formation_time"])
-    watch(states, config, config["formation_time"] + 1.0)   # +1 s to settle
+    fly_to_positions(drones, states, config, [(x, 0.0) for x in config["start_x"]])
 
 
-def run_convoy(drones, config, states, use_surprise, rows):
+def run_convoy(drones, config, states, use_surprise, rows, observer):
     """
     The control loop shared by E1 and E2.
 
@@ -98,12 +87,11 @@ def run_convoy(drones, config, states, use_surprise, rows):
             states       — live telemetry from fly_safely (states[0] = CF1)
             use_surprise — False for E2 (baseline), True for E1 (gated)
             rows         — an empty list; one dictionary per control step is
-                           appended to it. (Passed in, rather than returned,
-                           so the caller still has the data if we abort.)
+                           appended (passed in so the data survives an abort)
+            observer     — adds the optional --noise to what the controller sees
     Output: none.
 
-    Called from: fly_safely() (as the 'mission'), via main() here or in
-    surprise_minimization_experiment.py.
+    Called from: fly_safely() (as the 'mission'), via run_experiment().
     """
     try:
         fly_to_start_line(drones, states, config)
@@ -119,13 +107,14 @@ def run_convoy(drones, config, states, use_surprise, rows):
             if t >= config["duration"]:
                 break
 
-            # Stop the flight if a drone left the arena, flies away, data is stale, or
-            # two drones are too close. min_gap_abort is optional in the config.
+            # Safety uses the TRUE state: arena, fly-away, stale data, and
+            # (optional) minimum gap.
             check_in_flight(states, config, config.get("min_gap_abort"))
 
-            # Snapshot the latest telemetry (index 0 = CF1, 1 = CF2, 2 = CF3).
-            x = [s["x"] for s in states]
-            v = [s["vx"] for s in states]
+            # What the controller sees (with --noise, a noisy copy).
+            seen = [observer.see(s) for s in states]
+            x = [s["x"] for s in seen]
+            v = [s["vx"] for s in seen]
 
             # --- Leader (CF1)
             leader_vx, leader_stopped = leader_command(x[0], leader_stopped, config)
@@ -147,15 +136,16 @@ def run_convoy(drones, config, states, use_surprise, rows):
             send_velocity(drones[1], cf2["command"], states[1], config)
             send_velocity(drones[2], cf3["command"], states[2], config)
 
-            # --- Record this step (simple CSV for now; the standard
-            #     §7 logger will replace this in a later step)
+            # --- Record this step. Gaps use the TRUE positions (what really
+            #     happened); the controller values are what it decided on.
+            true_x = [s["x"] for s in states]
             rows.append({
-                "t": t,
-                "x1": x[0], "x2": x[1], "x3": x[2],
-                "v1": v[0], "v2": v[1], "v3": v[2],
+                "t": round(t, 3),
+                "x1": true_x[0], "x2": true_x[1], "x3": true_x[2],
+                "v1": states[0]["vx"], "v2": states[1]["vx"], "v3": states[2]["vx"],
                 "leader_stopped": leader_stopped,
-                "gap_12": x[0] - x[1],
-                "gap_23": x[1] - x[2],
+                "gap_12": true_x[0] - true_x[1],
+                "gap_23": true_x[1] - true_x[2],
                 "S2": cf2["prediction_error"], "S3": cf3["prediction_error"],
                 "U2": cf2["surprise"], "U3": cf3["surprise"],
                 "factor2": cf2["speed_factor"], "factor3": cf3["speed_factor"],
@@ -163,14 +153,12 @@ def run_convoy(drones, config, states, use_surprise, rows):
                 "cmd1": leader_vx, "cmd2": cf2["command"], "cmd3": cf3["command"],
             })
 
-            # Print a status line about once per second (every 10th step at 10 Hz).
-            if len(rows) % 10 == 1:
-                print(f"t={t:5.1f}s  x=[{x[0]:5.2f} {x[1]:5.2f} {x[2]:5.2f}]  "
-                      f"gaps=[{x[0] - x[1]:.2f} {x[1] - x[2]:.2f}]  "
+            if len(rows) % 10 == 1:   # about once per second
+                print(f"t={t:5.1f}s  x=[{true_x[0]:5.2f} {true_x[1]:5.2f} {true_x[2]:5.2f}]  "
+                      f"gaps=[{rows[-1]['gap_12']:.2f} {rows[-1]['gap_23']:.2f}]  "
                       f"factor=[{cf2['speed_factor']:.2f} {cf3['speed_factor']:.2f}]")
 
-            # Sleep only for what is LEFT of the control period, so the loop
-            # keeps a steady 10 Hz even when a step took some time.
+            # Sleep only for what is LEFT of the control period (steady 10 Hz).
             step_time = time.time() - step_start
             if step_time > 0.3:
                 print(f"WARNING: control step took {step_time:.2f} s")
@@ -185,59 +173,76 @@ def run_convoy(drones, config, states, use_surprise, rows):
                 pass
 
 
-def save_csv(rows, config, experiment_name):
+def metrics(rows, config):
     """
-    Write the recorded rows to data/raw/<experiment>_<mode>_<timestamp>.csv.
+    Per-run results for comparing E1 and E2 (all distances in m, times in s):
 
-    Input:  rows            — list of dictionaries from run_convoy()
-            config          — uses log_dir, mode
-            experiment_name — e.g. "convoy_baseline"
-    Output: the path of the file written.
-
-    Called from: main(), after the drones have landed (or aborted).
+      min_gap              — closest any follower came to the drone ahead
+      stop_time            — when the leader stopped (empty if it never did)
+      overshoot_after_stop — how far a gap went BELOW follow_distance after
+                             the leader stopped (how hard the convoy "bunched up")
+      settling_after_stop  — time after the stop until both gaps stay within
+                             gap_tolerance of follow_distance (empty if never)
+      final_gap_error      — mean |gap - follow_distance| at the end
+      low_factor_fraction  — share of steps with speed factor < 0.1 (both
+                             followers): high = gating is just freezing the drones
+      repel_fraction       — share of steps where the safety push was active
     """
-    os.makedirs(config["log_dir"], exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    path = os.path.join(config["log_dir"],
-                        f"{experiment_name}_{config['mode']}_{stamp}.csv")
+    target = config["follow_distance"]
+    tol = config.get("gap_tolerance", 0.08)
+    gaps = [(r["gap_12"], r["gap_23"]) for r in rows]
 
-    with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-        writer.writeheader()
-        writer.writerows(rows)
+    stop_i = next((i for i, r in enumerate(rows) if r["leader_stopped"]), None)
+    result = {"min_gap": round(min(min(g) for g in gaps), 3),
+              "stop_time": "", "overshoot_after_stop": "", "settling_after_stop": ""}
+    if stop_i is not None:
+        after = gaps[stop_i:]
+        result["stop_time"] = round(rows[stop_i]["t"], 2)
+        result["overshoot_after_stop"] = round(max(0.0, target - min(min(g) for g in after)), 3)
+        for i in range(stop_i, len(rows)):
+            if all(abs(a - target) <= tol and abs(b - target) <= tol for a, b in gaps[i:]):
+                result["settling_after_stop"] = round(rows[i]["t"] - rows[stop_i]["t"], 2)
+                break
 
-    return path
+    n = len(rows)
+    result["final_gap_error"] = round(sum(abs(g - target) for g in gaps[-1]) / 2, 3)
+    result["low_factor_fraction"] = round(
+        sum((r["factor2"] < 0.1) + (r["factor3"] < 0.1) for r in rows) / (2 * n), 3)
+    result["repel_fraction"] = round(
+        sum(bool(r["repel2"]) + bool(r["repel3"]) for r in rows) / (2 * n), 3)
+    return result
 
 
 def run_experiment(experiment_name, use_surprise):
     """
-    Parse the command line, fly one convoy run, and save its CSV.
-
-    Input:  experiment_name — used in the CSV file name
-            use_surprise    — False for E2, True for E1
-    Output: none.
+    Parse the command line, fly one convoy run, save CSV + JSON with metrics.
 
     Called from: main() here (E2) and surprise_minimization_experiment.py (E1).
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default=DEFAULT_CONFIG)
-    parser.add_argument("--mode", choices=["sim", "real"], help="override mode in config")
+    parser = cli.make_parser(DEFAULT_CONFIG, f"Convoy experiment: {experiment_name}")
     args = parser.parse_args()
-
-    config = load_config(args.config)
-    if args.mode:
-        config["mode"] = args.mode
+    config, seed = cli.load(args)
+    observer = Observer(args.noise, seed)
 
     rows = []
+    aborted = True   # stays True unless the flight finishes normally
     try:
         fly_safely(config, 3,
                    lambda drones, cfg, states: run_convoy(drones, cfg, states,
-                                                          use_surprise, rows))
-
+                                                          use_surprise, rows, observer))
+        aborted = False
     finally:
         # Save whatever was recorded, even if the run was aborted.
         if rows:
-            print(f"Saved {len(rows)} rows to {save_csv(rows, config, experiment_name)}")
+            result = metrics(rows, config)
+            # Files: data/raw/convoy_<baseline|surprise>_<mode>_<time>.csv/.json
+            save_run(rows, config, "convoy", "surprise" if use_surprise else "baseline",
+                     {"noise_std": args.noise, "seed": seed, "aborted": aborted,
+                      "flown_s": rows[-1]["t"], "metrics": result})
+            for key, value in result.items():
+                print(f"  {key:22s} {value}")
+            if aborted:
+                print("NOTE: this run was ABORTED — exclude it when comparing.")
         else:
             print("No data recorded.")
 

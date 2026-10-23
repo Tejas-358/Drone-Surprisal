@@ -21,6 +21,15 @@
 #   - roughly along the x axis, so neither drone hides a base station from
 #     the other (the base stations sit at y = -3.2 and y = +3.0).
 # The experiment prints a warning if either is not the case.
+#
+# With --scenario too_far / too_close the drones FLY to these start
+# positions after takeoff (each at its own height on the way). This is
+# how the scenarios are set up in the simulator, where drones cannot be
+# placed by hand. (x, y) in metres, CF1 first.
+start_positions:
+  too_far:   [[0.40, 0.0], [-0.40, 0.0]]     # 0.80 m apart -> should move together
+  too_close: [[0.225, 0.0], [-0.225, 0.0]]   # 0.45 m apart -> should move apart
+transfer_time: 4.0       # s, time for the sideways move to the start positions
 
 # --- Separation -------------------------------------------------------
 desired_distance: 0.60   # m, the separation the controller should hold

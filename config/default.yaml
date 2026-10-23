@@ -12,7 +12,7 @@
 
 # "sim" = CrazySim on this computer, "real" = real Crazyflies over radio.
 # This is the ONLY switch between simulation and hardware.
-mode: sim              # use --mode real on the command line to fly real drones
+mode: real              # use --mode real on the command line to fly real drones
 
 # --- Connection -------------------------------------------------
 # One URI per drone. Drone 0 is the first entry (called CF1 in prints).
@@ -23,9 +23,9 @@ uris:
     - udp://127.0.0.1:19852   # CF3
   real:
     # [FILL IN] your radio addresses, e.g. radio://0/80/2M/E7E7E7E7E1
-    - radio://0/80/2M/E7E7E7E7E6
-    - radio://0/80/2M/E7E7E7E7E5
     - radio://0/80/2M/E7E7E7E7E7
+    - radio://0/80/2M/E7E7E7E7E5
+    - radio://0/80/2M/E7E7E7E7E6
 
 # Folder where CFLib stores the drone's parameter/log tables.
 cache_dir: ./cache

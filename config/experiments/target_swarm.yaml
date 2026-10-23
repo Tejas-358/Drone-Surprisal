@@ -1,0 +1,47 @@
+# ============================================================
+# target_swarm.yaml — settings for the 3-drone target experiment
+# (src/experiments/target_swarm_experiment.py, maths in
+#  src/controllers/target_swarm_controller.py).
+#
+# Three drones start on one side of the arena and all fly to ONE target
+# point. No leader, nobody follows anybody: each drone moves to lower its
+# own total surprise about (1) the target and (2) its neighbours.
+#   --controller surprise   target + neighbours          (PROPOSED)
+#   --controller goal_only  target only, ignore others   (BASELINE)
+#
+# Loaded on top of config/default.yaml (height, URIs, arena, ...).
+# ============================================================
+
+# --- Start and target (x, y in metres, Lighthouse/world frame) --------
+# The drones fly to these start positions after takeoff (each at its own
+# height on the way), so the same layout is used in sim and on real drones.
+start_positions: [[-0.8, -0.6], [-0.8, 0.0], [-0.8, 0.6]]   # CF1, CF2, CF3
+target: [0.6, 0.0]
+transfer_time: 4.0        # s, time for the move to the start positions
+
+# --- Expectations (the "surprise model") ---------------------------
+desired_distance: 0.60    # m, expected distance between any two drones
+sigma_distance: 0.10      # m, how much neighbour distance may vary "normally"
+sigma_goal: 0.30          # m, how far from the target still counts as "normal"
+
+# --- Turning surprise into motion -------------------------------------
+step_gain: 0.02           # velocity = -step_gain * gradient of total surprise
+max_horizontal_speed: 0.10   # m/s, per drone (NOT the safety max_speed in default.yaml)
+
+# --- Safety (both controllers) -----------------------------------------
+protective_distance: 0.35       # m, push apart below this
+separation_recovery_gain: 1.5   # strength of that push
+critical_distance: 0.20         # m, abort and land below this
+
+# --- Height hold and limits -----------------------------------------------
+altitude_kp: 0.50
+max_vertical_speed: 0.08  # m/s
+min_altitude: 0.20        # m, abort below this during the run
+max_altitude: 0.80        # m, abort above this during the run
+
+# --- Metrics ---------------------------------------------------------
+arrival_tolerance: 0.10   # m, "arrived" = swarm centre within this of the target
+
+# --- Timing -----------------------------------------------------------
+duration: 40.0            # s, length of the controlled part (always the full time)
+control_period: 0.1       # s (10 Hz)

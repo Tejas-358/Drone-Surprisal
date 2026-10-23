@@ -35,8 +35,18 @@ def load_config(experiment_config=None):
 
     if experiment_config is not None:
         with open(experiment_config) as f:
-            # update() copies every key from the experiment file over the defaults
-            config.update(yaml.safe_load(f))
+            experiment = yaml.safe_load(f)
+
+        # Warn if the experiment file replaces a shared default. This is
+        # sometimes intended (e.g. a different height), but an accidental
+        # clash — like a speed limit named the same as the safety
+        # `max_speed` — would silently change the safety checks.
+        clashes = sorted(set(experiment) & set(config))
+        if clashes:
+            print(f"NOTE: {experiment_config} overrides default.yaml: {', '.join(clashes)}")
+
+        # update() copies every key from the experiment file over the defaults
+        config.update(experiment)
 
     return config
 

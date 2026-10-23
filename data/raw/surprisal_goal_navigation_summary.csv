@@ -1,0 +1,4 @@
+run_file,controller,mode,scenario,noise_std,seed,aborted,flown_s,start_distance,final_distance,final_error,min_distance,overshoot,settling_time,rms_error,control_effort,protective_fraction
+surprisal_goal_navigation_fixed_real_20261019-143939.csv,fixed,real,too_far,0.0,,True,19.0,0.795,0.59,-0.01,0.58,0.02,19.04,0.1515,2.058,0.0
+surprisal_goal_navigation_fixed_real_20261019-152513.csv,fixed,real,too_far,0.0,,False,29.9,0.869,0.625,0.025,0.566,0.034,23.76,0.1082,1.551,0.0
+surprisal_goal_navigation_fixed_real_20261019-152809.csv,fixed,real,too_close,0.0,,False,30.0,0.431,0.592,-0.008,0.431,0.05,27.64,0.0501,1.364,0.0
