@@ -219,7 +219,7 @@ def run_mission(drones, config, states, controller, scenario, observer, rows):
                 print(f"t={t:5.1f}s  d={true_d:.3f} m  e={e:+.3f}  S={S:6.2f}  kp={kp:.2f}  "
                       f"goal_err={goal_err:.2f}{'  PROTECT' if protective else ''}")
 
-            # Safety checks (arena, fly-away, stale data) while waiting for
+            # Safety check (radio link still OK) while waiting for
             # the rest of this control period.
             watch(states, config, max(0.0, config["control_period"] - (time.time() - step_start)))
 

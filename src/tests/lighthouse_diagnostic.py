@@ -116,6 +116,14 @@ def main():
             print(f"Lighthouse deck: {get('deck.bcLighthouse4')}   "
                   f"Estimator: {get('stabilizer.estimator')} (2 = Kalman, needed)")
 
+            # Without a detected deck there is no Lighthouse memory to read,
+            # so report it and go on to the next drone instead of crashing.
+            if int(get("deck.bcLighthouse4")) != 1:
+                print("   NO LIGHTHOUSE DECK DETECTED — this drone cannot fly the experiments.")
+                print("   Power off, press the deck firmly onto its pins (arrow matching")
+                print("   the drone), power on, and run this check again.")
+                continue
+
             print("Stored base-station geometry (where this drone thinks each BS is):")
             geometries = read_geometry(scf)
             for bs, geo in sorted(geometries.items()):

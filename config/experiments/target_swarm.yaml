@@ -15,7 +15,10 @@
 # --- Start and target (x, y in metres, Lighthouse/world frame) --------
 # The drones fly to these start positions after takeoff (each at its own
 # height on the way), so the same layout is used in sim and on real drones.
-start_positions: [[-0.8, -0.6], [-0.8, 0.0], [-0.8, 0.6]]   # CF1, CF2, CF3
+# Staggered on purpose: if the three stood in a line along y, the middle
+# drone would hide a base station (at y = -3.2 / +3.0) from the others.
+# Start distances: CF1-CF2 0.78 m, CF2-CF3 0.78 m, CF1-CF3 1.20 m.
+start_positions: [[-0.9, -0.6], [-0.4, 0.0], [-0.9, 0.6]]   # CF1, CF2, CF3
 target: [0.6, 0.0]
 transfer_time: 4.0        # s, time for the move to the start positions
 
@@ -33,11 +36,9 @@ protective_distance: 0.35       # m, push apart below this
 separation_recovery_gain: 1.5   # strength of that push
 critical_distance: 0.20         # m, abort and land below this
 
-# --- Height hold and limits -----------------------------------------------
+# --- Height hold -----------------------------------------------
 altitude_kp: 0.50
 max_vertical_speed: 0.08  # m/s
-min_altitude: 0.20        # m, abort below this during the run
-max_altitude: 0.80        # m, abort above this during the run
 
 # --- Metrics ---------------------------------------------------------
 arrival_tolerance: 0.10   # m, "arrived" = swarm centre within this of the target

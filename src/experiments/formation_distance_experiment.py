@@ -63,7 +63,7 @@ def run_formation(drones, config, states, rows, observer):
         if t >= config["duration"]:
             break
 
-        # Safety uses the TRUE state (arena, fly-away, stale data).
+        # Safety: radio link still OK (fresh data from every drone).
         check_in_flight(states, config)
 
         # What the controller sees (with --noise, a noisy copy).

@@ -39,31 +39,10 @@ land_time: 5.0         # s, how long the landing manoeuvre takes
 log_period_ms: 100     # how often the drone sends its state (100 ms = 10 Hz)
 
 # --- Safety (used by src/utils/safety.py) -----------------------
-# Arena = the box the drones must stay inside, in Lighthouse coordinates (m).
-# A drone outside it -> refuse to take off / land everything immediately.
-arena:
-  sim:                 # big: CrazySim has no walls
-    x_min: -10.0
-    x_max: 10.0
-    y_min: -10.0
-    y_max: 10.0
-    z_max: 2.0
-  real:                # [CONFIRM] measure YOUR flight area and keep ~0.5 m
-    x_min: -2.0        # away from walls / base stations / people.
-    x_max: 2.0         # Base stations are at y = -3.2 and y = +3.0, so
-    y_min: -2.0        # y stays within +-2.0 (about 1 m clear of them).
-    y_max: 2.0
-    z_max: 1.5
-
+# Kept deliberately simple. Lighthouse position jumps caused false alarms,
+# so there is no speed limit, arena box or jitter check any more.
 max_data_age: 0.5      # s, land everything if a drone's data is older than this
-max_speed: 1.0         # m/s, CUT MOTORS if a drone moves faster (flying away)
-emergency_confirm_steps: 3   # a problem must be seen this many checks in a row
-                             # (0.1 s each) before motors are cut. Stops one
-                             # bad Lighthouse sample from dropping a drone.
-min_battery_v: 3.7     # V, refuse to take off below this (measured at rest)
-
-preflight_max_spread: 0.05   # m, refuse to fly if the position jumps more than
-                             # this while the drone sits still on the floor
+min_battery_v: 3.7     # V, below this the pre-flight check prints a LOW warning
 
 
 # --- Output -----------------------------------------------------

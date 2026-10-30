@@ -1,0 +1,78 @@
+{
+  "experiment": "target_swarm",
+  "variant": "surprise",
+  "mode": "real",
+  "timestamp": "2026-10-28T16:21:29",
+  "git_commit": "86f6f60",
+  "csv": "target_swarm_surprise_real_20261028-162129.csv",
+  "n_rows": 387,
+  "noise_std": 0.0,
+  "seed": 679569,
+  "aborted": false,
+  "flown_s": 39.904,
+  "metrics": {
+    "arrival_time": 21.21,
+    "final_centre_error": 0.061,
+    "min_pair_distance": 0.418,
+    "final_spacing_error": 0.102,
+    "final_spacing_spread": 0.173,
+    "final_total_surprise": 4.073,
+    "protective_fraction": 0.0,
+    "control_effort": 10.799
+  },
+  "config": {
+    "mode": "real",
+    "uris": {
+      "sim": [
+        "udp://127.0.0.1:19850",
+        "udp://127.0.0.1:19851",
+        "udp://127.0.0.1:19852"
+      ],
+      "real": [
+        "radio://0/80/2M/E7E7E7E7E7",
+        "radio://0/80/2M/E7E7E7E7E5",
+        "radio://0/80/2M/E7E7E7E7E6"
+      ]
+    },
+    "cache_dir": "./cache",
+    "height": 0.4,
+    "takeoff_time": 5.0,
+    "land_time": 5.0,
+    "log_period_ms": 100,
+    "max_data_age": 0.5,
+    "min_battery_v": 3.7,
+    "log_dir": "data/raw",
+    "start_positions": [
+      [
+        -0.9,
+        -0.6
+      ],
+      [
+        -0.4,
+        0.0
+      ],
+      [
+        -0.9,
+        0.6
+      ]
+    ],
+    "target": [
+      0.6,
+      0.0
+    ],
+    "transfer_time": 4.0,
+    "desired_distance": 0.6,
+    "sigma_distance": 0.1,
+    "sigma_goal": 0.3,
+    "step_gain": 0.02,
+    "max_horizontal_speed": 0.1,
+    "protective_distance": 0.35,
+    "separation_recovery_gain": 1.5,
+    "critical_distance": 0.2,
+    "altitude_kp": 0.5,
+    "max_vertical_speed": 0.08,
+    "arrival_tolerance": 0.1,
+    "duration": 40.0,
+    "control_period": 0.1
+  }
+}

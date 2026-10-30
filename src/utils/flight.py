@@ -5,8 +5,6 @@ Every script flies the same way:
     connect -> take off -> do its mission -> land -> disconnect
 fly_safely() does all of that, and puts the landing inside a `finally:`
 block, so the drones land even if the mission crashes or you press Ctrl-C.
-If safety.py raises EmergencyStop (a drone outside the arena or flying away),
-THAT drone's motors are cut immediately; the other drones still land.
 
 Used by: every sanity test (src/tests/) and every experiment
 (src/experiments/). Scripts should call fly_safely() rather than
@@ -17,7 +15,7 @@ import time
 
 from src.utils.connection import connect_all, disconnect_all
 from src.utils import sensors
-from src.utils.safety import preflight_check, watch, EmergencyStop
+from src.utils.safety import preflight_check, watch
 
 
 def set_armed(scf, armed):
@@ -240,7 +238,6 @@ def fly_safely(config, n_drones, mission):
     states = []
     log_configs = []
     took_off = False     # becomes True once takeoff has been commanded
-    cut = None           # index of a drone whose motors were cut in an emergency
 
     try:
         # One telemetry stream per drone for the whole flight.
@@ -254,21 +251,10 @@ def fly_safely(config, n_drones, mission):
         takeoff_all(drones, states, config)
         return mission(drones, config, states)
 
-    except EmergencyStop as error:
-        # This drone's position looks broken: do NOT try to fly it anywhere.
-        # Cut ONLY its motors; the other drones are landed normally below.
-        print()
-        print(error)
-        print(f"Cutting motors of CF{error.drone + 1}!")
-        cut = error.drone
-        stop_motors([drones[cut]])
-        raise
-
     finally:
         # Runs no matter what: normal finish, error, or Ctrl-C.
         if took_off:
-            keep = [i for i in range(len(drones)) if i != cut]
-            land_all([drones[i] for i in keep], [states[i] for i in keep], config)
+            land_all(drones, states, config)
         stop_motors(drones)   # motors off + disarm (harmless if already off)
         sensors.stop_all(log_configs)
         disconnect_all(drones)

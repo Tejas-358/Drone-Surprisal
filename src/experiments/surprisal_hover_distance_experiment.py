@@ -197,7 +197,7 @@ def mission(drones, config, states):
                 dt = max(now - previous_time, 1e-3)
                 previous_time = now
 
-                # Shared safety check: arena, fly-away speed, stale data.
+                # Shared safety check: radio link still OK.
                 check_in_flight(states, config)
 
                 p1, p2 = get_positions()
