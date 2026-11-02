@@ -19,6 +19,8 @@ only `--mode sim` / `--mode real` changes.
 | **Convoy E2**: leader–follower train, leader stops at a virtual wall | 3 | `convoy_baseline` | baseline |
 | **Convoy E1**: same, followers slow down when surprised | 3 | `surprise_minimization` | surprise-gated (sweep `noise_scale`) |
 | **Formation E3**: fix a wonky line of drones | 3 | `formation_distance` | — |
+| **Two drones, second order**: same task, acceleration control + Fitts sweep | 2 | `second_order_pair` | `second_order` vs `second_order_adaptive` (+ first-order runs above) |
+| **Three drones, second order**: same task, acceleration control + Fitts sweep | 3 | `second_order_swarm` | `goal_only_second_order` vs `second_order` (+ first-order runs above) |
 
 Sanity checks (not experiments): `test_connection`, `takeoff_test`,
 `three_takeoff_test`, `hover_telemetry_test`, `lighthouse_diagnostic`,
@@ -196,6 +198,8 @@ python -m analysis.plot_goal_navigation_runs --mode sim     # or --mode real
 python -m analysis.plot_target_swarm_runs --mode sim
 python -m analysis.plot_convoy_runs --mode sim
 python -m analysis.plot_formation_runs --mode sim
+python -m analysis.plot_second_order_pair_runs --mode sim
+python -m analysis.plot_second_order_swarm_runs --mode sim
 python -m analysis.plot_surprisal_distance data/raw/<one run>.csv --target 0.6
 ```
 

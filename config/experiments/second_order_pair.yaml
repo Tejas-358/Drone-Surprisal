@@ -1,0 +1,60 @@
+# ============================================================
+# second_order_pair.yaml — settings for the two-drone SECOND-ORDER
+# experiment (src/experiments/second_order_pair_experiment.py,
+# maths in src/controllers/second_order_controller.py, EXPERIMENTS.md §7).
+#
+# Same task as surprisal_goal_navigation: keep desired_distance while the
+# midpoint flies to a goal. The controller sets the gap ACCELERATION
+# (spring + critically damped absorber) instead of a velocity:
+#   --controller second_order           constant spring kp = base_kp
+#   --controller second_order_adaptive  spring stiffens with surprise
+# The first-order baselines (fixed / adaptive) are run with
+# surprisal_goal_navigation_experiment.py under the same conditions.
+#
+# Loaded on top of config/default.yaml (height, URIs, ...).
+# ============================================================
+
+# --- Start positions (x, y in metres, CF1 first) ----------------------
+# Same as surprisal_goal_navigation.yaml so the four controllers compare.
+# --start-gap G instead places the drones at (+G/2, 0) and (-G/2, 0)
+# (used for the Fitts sweep).
+start_positions:
+  too_far:   [[0.40, 0.0], [-0.40, 0.0]]     # 0.80 m apart
+  too_close: [[0.225, 0.0], [-0.225, 0.0]]   # 0.45 m apart
+transfer_time: 4.0       # s
+settle_time: 4.0         # s, hover after the transfer before control starts
+                         # (real runs wobbled ~0.3 m in y for 2-3 s after it)
+
+# --- Separation (same as surprisal_goal_navigation) -------------------
+desired_distance: 0.60   # m
+distance_tolerance: 0.05 # m, "settled" band; Fitts width W = 2 * this
+protective_distance: 0.40  # m, push apart below this
+critical_distance: 0.30    # m, abort below this
+separation_recovery_gain: 0.50
+
+# --- Second-order controller ------------------------------------------
+sigma_distance: 0.10     # m, surprise scale
+base_kp: 0.64            # (1/s^2) spring, omega = sqrt(kp) = 0.8 rad/s
+surprise_gain: 1.5       # adaptive only: kp grows as base_kp * (1 + k S)
+max_kp: 1.44             # adaptive only: omega <= 1.2 rad/s (omega*dt = 0.12)
+                         # damping kd = 2*sqrt(kp) is computed, not set
+max_gap_rate: 0.20       # m/s, limit on the gap-rate command (2 x per-drone limit)
+rate_filter: 0.3         # low-pass alpha on the measured gap rate (1 = off)
+
+# --- Formation goal (same as surprisal_goal_navigation) ---------------
+goal_offset: [0.5, 0.0]
+goal_kp: 0.20
+max_goal_speed: 0.08
+goal_tolerance: 0.08
+
+# --- Flight limits ----------------------------------------------------
+max_horizontal_speed: 0.10   # m/s, per drone
+altitude_kp: 0.50
+max_vertical_speed: 0.08
+min_altitude: 0.20
+max_altitude: 0.80
+altitude_abort_steps: 3      # abort after this many bad z readings in a row (0.3 s)
+
+# --- Timing -----------------------------------------------------------
+duration: 30.0
+control_period: 0.1      # s (10 Hz)
