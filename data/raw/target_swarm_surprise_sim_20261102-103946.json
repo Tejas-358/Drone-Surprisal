@@ -1,0 +1,99 @@
+{
+  "experiment": "target_swarm",
+  "variant": "surprise",
+  "mode": "sim",
+  "timestamp": "2026-11-02T10:39:46",
+  "git_commit": "86f6f60",
+  "csv": "target_swarm_surprise_sim_20261102-103946.csv",
+  "n_rows": 395,
+  "noise_std": 0.03,
+  "seed": 101,
+  "aborted": false,
+  "flown_s": 39.929,
+  "metrics": {
+    "arrival_time": "",
+    "final_centre_error": 0.137,
+    "min_pair_distance": 0.403,
+    "final_spacing_error": 0.069,
+    "final_spacing_spread": 0.178,
+    "final_total_surprise": 5.278,
+    "protective_fraction": 0.003,
+    "control_effort": 11.542
+  },
+  "config": {
+    "mode": "sim",
+    "uris": {
+      "sim": [
+        "udp://127.0.0.1:19850",
+        "udp://127.0.0.1:19851",
+        "udp://127.0.0.1:19852"
+      ],
+      "real": [
+        "radio://0/80/2M/E7E7E7E7E7",
+        "radio://0/80/2M/E7E7E7E7E5",
+        "radio://0/80/2M/E7E7E7E7E6"
+      ]
+    },
+    "cache_dir": "./cache",
+    "height": 0.4,
+    "takeoff_time": 5.0,
+    "land_time": 5.0,
+    "log_period_ms": 100,
+    "arena": {
+      "sim": {
+        "x_min": -10.0,
+        "x_max": 10.0,
+        "y_min": -10.0,
+        "y_max": 10.0,
+        "z_max": 2.0
+      },
+      "real": {
+        "x_min": -2.0,
+        "x_max": 2.0,
+        "y_min": -2.0,
+        "y_max": 2.0,
+        "z_max": 1.5
+      }
+    },
+    "max_data_age": 0.5,
+    "max_speed": 1.0,
+    "emergency_confirm_steps": 3,
+    "min_battery_v": 3.7,
+    "preflight_max_spread": 0.05,
+    "log_dir": "data/raw",
+    "start_positions": [
+      [
+        -0.8,
+        -0.6
+      ],
+      [
+        -0.8,
+        0.0
+      ],
+      [
+        -0.8,
+        0.6
+      ]
+    ],
+    "target": [
+      0.6,
+      0.0
+    ],
+    "transfer_time": 4.0,
+    "desired_distance": 0.6,
+    "sigma_distance": 0.1,
+    "sigma_goal": 0.3,
+    "step_gain": 0.02,
+    "max_horizontal_speed": 0.1,
+    "protective_distance": 0.35,
+    "separation_recovery_gain": 1.5,
+    "critical_distance": 0.2,
+    "altitude_kp": 0.5,
+    "max_vertical_speed": 0.08,
+    "min_altitude": 0.2,
+    "max_altitude": 0.8,
+    "arrival_tolerance": 0.1,
+    "duration": 40.0,
+    "control_period": 0.1
+  }
+}

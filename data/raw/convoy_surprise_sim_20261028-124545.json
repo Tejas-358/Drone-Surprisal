@@ -1,0 +1,81 @@
+{
+  "experiment": "convoy",
+  "variant": "surprise",
+  "mode": "sim",
+  "timestamp": "2026-10-28T12:45:45",
+  "git_commit": "86f6f60",
+  "csv": "convoy_surprise_sim_20261028-124545.csv",
+  "n_rows": 599,
+  "noise_std": 0.03,
+  "seed": 101,
+  "aborted": false,
+  "flown_s": 59.977,
+  "metrics": {
+    "min_gap": 0.433,
+    "stop_time": 31.27,
+    "overshoot_after_stop": 0.567,
+    "settling_after_stop": "",
+    "final_gap_error": 0.377,
+    "low_factor_fraction": 0.003,
+    "repel_fraction": 0.01
+  },
+  "config": {
+    "mode": "sim",
+    "uris": {
+      "sim": [
+        "udp://127.0.0.1:19850",
+        "udp://127.0.0.1:19851",
+        "udp://127.0.0.1:19852"
+      ],
+      "real": [
+        "radio://0/80/2M/E7E7E7E7E7",
+        "radio://0/80/2M/E7E7E7E7E5",
+        "radio://0/80/2M/E7E7E7E7E6"
+      ]
+    },
+    "cache_dir": "./cache",
+    "height": 0.4,
+    "takeoff_time": 5.0,
+    "land_time": 5.0,
+    "log_period_ms": 100,
+    "arena": {
+      "sim": {
+        "x_min": -10.0,
+        "x_max": 10.0,
+        "y_min": -10.0,
+        "y_max": 10.0,
+        "z_max": 2.0
+      },
+      "real": {
+        "x_min": -2.0,
+        "x_max": 2.0,
+        "y_min": -2.0,
+        "y_max": 2.0,
+        "z_max": 1.5
+      }
+    },
+    "max_data_age": 0.5,
+    "max_speed": 1.0,
+    "emergency_confirm_steps": 3,
+    "min_battery_v": 3.7,
+    "preflight_max_spread": 0.05,
+    "log_dir": "data/raw",
+    "start_x": [
+      0.0,
+      -1.0,
+      -2.0
+    ],
+    "formation_time": 3.0,
+    "wall_x": 5.0,
+    "wall_stop_distance": 0.5,
+    "leader_speed": 0.15,
+    "follow_distance": 1.0,
+    "follow_gain": 0.8,
+    "max_follow_speed": 0.15,
+    "safe_distance": 0.55,
+    "noise_scale": 0.2,
+    "surprise_gain": 1.0,
+    "duration": 60.0,
+    "control_period": 0.1
+  }
+}
