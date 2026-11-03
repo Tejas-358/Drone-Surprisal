@@ -31,6 +31,11 @@ kappa: 0.0225             # acceleration = -kappa * grad F - damping
                           # goal:      omega_g = sqrt(kappa)/sigma_goal       = 0.5 rad/s
                           # neighbour: omega_n = sqrt(2 kappa)/sigma_distance ~ 2.1 rad/s
                           # damping for both is computed (critical), not set
+kappa_neighbour: 0.01     # softer neighbour spring: omega_n = sqrt(2*0.01)/0.1 ~ 1.4 rad/s
+                          # (with kappa, 2.1 rad/s oscillated on real drones)
+                          # -> triangle settles at ~0.55 m sides instead of 0.58
+damp_on: command          # "command": dampers use the commanded velocity (noise-free)
+                          # "measured": filtered Lighthouse velocity (jittered on real drones)
 max_horizontal_speed: 0.15   # m/s, per drone (velocity command limit)
 rate_filter: 0.3          # low-pass alpha on measured velocities / pair rates
 

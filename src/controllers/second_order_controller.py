@@ -125,15 +125,18 @@ def swarm_damping(config):
 
     goal spring:      stiffness kappa / sigma_goal^2 on one drone
                       -> omega_g = sqrt(kappa) / sigma_goal,  c_g = 2 * omega_g
-    neighbour spring: stiffness kappa / sigma_distance^2, but BOTH drones of a
+    neighbour spring: stiffness kappa_n / sigma_distance^2, but BOTH drones of a
                       pair move, so the pair distance sees twice that
-                      -> omega_n = sqrt(2 kappa) / sigma_distance,  c_n = omega_n
+                      -> omega_n = sqrt(2 kappa_n) / sigma_distance,  c_n = omega_n
                       (each drone brakes with c_n, the pair with 2 c_n = 2 omega_n)
+    kappa_n = kappa_neighbour if set, else kappa. A softer neighbour spring
+    keeps omega_n low enough for the real drones' delay and velocity noise.
     Output: (c_g, c_n, omega_g, omega_n)
     """
     kappa = config["kappa"]
+    kappa_n = config.get("kappa_neighbour", kappa)
     omega_g = math.sqrt(kappa) / config["sigma_goal"]
-    omega_n = math.sqrt(2.0 * kappa) / config["sigma_distance"]
+    omega_n = math.sqrt(2.0 * kappa_n) / config["sigma_distance"]
     return 2.0 * omega_g, omega_n, omega_g, omega_n
 
 
@@ -159,6 +162,7 @@ def swarm_accelerations(positions, velocities, pair_rates, target, config, varia
             "F"             — total surprise this drone acts on
     """
     kappa = config["kappa"]
+    kappa_n = config.get("kappa_neighbour", kappa)
     sg2 = config["sigma_goal"] ** 2
     sd2 = config["sigma_distance"] ** 2
     c_g, c_n, _, _ = swarm_damping(config)
@@ -184,11 +188,13 @@ def swarm_accelerations(positions, velocities, pair_rates, target, config, varia
             if variant == "second_order":
                 rate = pair_rates[(min(i, j), max(i, j))]
                 # Too far or separating -> accelerate towards j (along -u).
-                strength = kappa * e / sd2 + c_n * rate
+                strength = kappa_n * e / sd2 + c_n * rate
                 ax -= strength * ux
                 ay -= strength * uy
 
         F = S_goal + (S_neigh if variant == "second_order" else 0.0)
+        if "max_accel" in config:
+            ax, ay = limit_speed(ax, ay, config["max_accel"])
         out.append({"ax": ax, "ay": ay, "S_goal": S_goal,
                     "S_neighbours": S_neigh, "F": F})
     return out

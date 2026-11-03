@@ -118,6 +118,14 @@ def run_mission(drones, config, states, variant, observer, rows, placed=False):
                 measured = ((seen[i]["vx"] - seen[j]["vx"]) * dx +
                             (seen[i]["vy"] - seen[j]["vy"]) * dy) / d
                 pair_rates[(i, j)] = pair_filters[(i, j)].update(measured)
+                if config["damp_on"] == "command":
+                    pair_rates[(i, j)] = ((v_cmd[i][0] - v_cmd[j][0]) * dx +
+                                          (v_cmd[i][1] - v_cmd[j][1]) * dy) / d
+            if config["damp_on"] == "command":
+                # Lighthouse velocity noise times the dampers made the real
+                # commands flip direction every step; the commanded velocity
+                # is noise-free and the drone tracks it closely.
+                vel = list(v_cmd)
 
             # --- Second-order step: integrate acceleration, then safety push
             acc = swarm_accelerations(pos, vel, pair_rates, target, config, variant)
