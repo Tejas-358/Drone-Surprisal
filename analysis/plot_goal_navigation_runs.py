@@ -34,6 +34,7 @@ OUTPUT = "analysis/figures/goal_navigation_runs_{mode}.png"
 
 # One fixed colour per controller (never by run order).
 COLORS = {"fixed": "#2a78d6", "adaptive": "#eb6834"}
+MAX_JUMPS = 5   # runs with more impossible gap jumps than this are skipped
 METRICS = ["settling_time", "rms_error", "overshoot", "min_distance", "control_effort"]
 
 
@@ -62,12 +63,27 @@ def load_runs(mode, target):
         for row in csv.DictReader(f):
             if row["aborted"] != "False" or row["mode"] != mode:
                 continue   # skip aborted runs and runs from the other mode
+            # A run that STARTED within 10 cm of the target had (almost) no
+            # error to correct, so it says nothing about the controller.
+            if abs(float(row["start_distance"]) - target) < 0.10:
+                print(f"Skipped (started at the target): {row['run_file']}")
+                continue
             path = os.path.join("data/raw", row["run_file"])
             if not os.path.exists(path):
                 print(f"Missing run file, skipped: {path}")
                 continue
             with open(path) as rf:
                 data = list(csv.DictReader(rf))
+            # Lighthouse glitches: the gap cannot really change faster than
+            # 0.2 m/s (each drone moves at most 0.10 m/s). More than a few
+            # "jumps" faster than 0.5 m/s mean the positions were not real.
+            jumps = sum(
+                1 for a, b in zip(data, data[1:])
+                if abs(float(b["distance"]) - float(a["distance"]))
+                / max(float(b["t"]) - float(a["t"]), 1e-3) > 0.5)
+            if jumps > MAX_JUMPS:
+                print(f"Skipped ({jumps} position jumps, Lighthouse tracking): {row['run_file']}")
+                continue
             runs.append({
                 "summary": row,
                 "scenario": scenario_of(row, target),

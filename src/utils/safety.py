@@ -1,24 +1,32 @@
 """
-safety.py — checks that stop a flight BEFORE something goes wrong.
+safety.py — the few safety checks we keep, kept simple.
 
-  preflight_check() — before arming: is every drone's position valid,
-                      STEADY, on the floor, inside the arena, and (real
-                      experiments) sitting on its start spot?
-  check_in_flight() — while flying: is every drone inside the arena, not
-                      flying too fast, is its data fresh, are drones too close?
+  preflight_check() — before arming: on real drones, is the Lighthouse deck
+                      there? Prints each drone's battery and position, and
+                      refuses to fly if a position is clearly NOT REAL
+                      (no Lighthouse fix — see below).
+  check_in_flight() — while flying: is fresh data still arriving from every
+                      drone (radio link OK)? Is every position still real
+                      (z not below the floor)? Optionally: drones too close?
   watch()           — "sleep" for a while, running check_in_flight() 10x
                       per second. Use it instead of time.sleep() in flight.
 
-Two kinds of error:
-  RuntimeError   -> fly_safely() LANDS all drones (e.g. stale data, drones
-                    too close: the position is still trustworthy).
-  EmergencyStop  -> fly_safely() CUTS THE MOTORS at once (drone outside the
-                    arena or flying too fast: the position estimate is
-                    probably broken, so trying to "land" could fly it into
-                    a wall. Dropping from < 1 m is safer.)
+A failed check RAISES an error. fly_safely() in flight.py answers every
+error by landing all drones, so "raise" here means "stop and land".
 
-Used by: flight.py (preflight + watch during takeoff/hover) and the
-experiment control loops (check_in_flight every step).
+"Is the position real?" — the two checks that matter most. A drone flying
+on a broken position estimate goes anywhere (28 Oct: z = -3 m, 35 m/s jumps,
+two drones crashed). Signs of no Lighthouse fix:
+  - on the floor, z is far from 0 (|z| > 0.1 m);
+    (NOT "x, y exactly 0, 0": the Lighthouse setup wizard puts the origin
+    where a drone stands, so (0, 0) can be a perfectly real position);
+  - in flight, z below the floor (z < -0.1 m).
+
+Deliberately NOT checked (they caused false alarms from small Lighthouse
+jumps): speed limit, arena box, position jitter, start spots.
+Keep the cfclient Emergency stop button within reach instead.
+
+Used by: flight.py and the experiment control loops.
 """
 
 import time
@@ -26,129 +34,66 @@ import time
 from src.utils import sensors
 
 
-class EmergencyStop(RuntimeError):
-    """
-    Raised when ONE drone's motors must be cut immediately (see top of file).
-    `drone` is that drone's index (0 = CF1), so the others can still land.
-    """
-    def __init__(self, message, drone):
-        super().__init__(message)
-        self.drone = drone
-
-
 def preflight_check(drones, states, config):
     """
-    Refuse to take off unless every drone has a valid, steady position.
+    Check the deck and print battery + position of every drone.
 
     Input:  drones — list from connect_all()
             states — list from sensors.start_all() (already streaming)
-            config — uses mode, arena, preflight_max_spread, and start_x if
-                     the experiment has one
-    Output: none. Raises RuntimeError (nothing takes off) if a check fails.
+            config — uses mode, min_battery_v
+    Output: none. Raises RuntimeError only if a real drone has no
+            Lighthouse deck (it could not fly at all).
 
     Called from: fly_safely(), after connecting and BEFORE arming.
     """
-    # 1. On real drones: is the Lighthouse deck detected, and is the
-    #    battery charged enough to lift off?
-    #    (CrazySim drones have no physical decks or batteries, so skip in sim.)
-    if config["mode"] == "real":
-        for i, scf in enumerate(drones):
+    for i, (scf, s) in enumerate(zip(drones, states)):
+        name = f"CF{i + 1}"
+
+        # The simulator has no physical decks or batteries.
+        if config["mode"] == "real":
             if int(scf.cf.param.get_value("deck.bcLighthouse4")) != 1:
-                raise RuntimeError(f"CF{i + 1}: Lighthouse deck not detected. Not flying.")
+                raise RuntimeError(f"{name}: Lighthouse deck not detected. Not flying.")
 
             vbat = sensors.read_battery(scf)
-            print(f"CF{i + 1} battery: {vbat:.2f} V" if vbat else f"CF{i + 1} battery: unknown")
-            # if vbat is not None and vbat < config["min_battery_v"]:
-            #     raise RuntimeError(f"CF{i + 1}: battery {vbat:.2f} V is below "
-            #                        f"{config['min_battery_v']} V. Charge it. Not flying.")
+            if vbat is not None:
+                low = "  <-- LOW, charge it" if vbat < config["min_battery_v"] else ""
+                print(f"{name} battery: {vbat:.2f} V{low}")
 
+        print(f"{name} at x={s['x']:.2f} y={s['y']:.2f} z={s['z']:.2f}")
 
-    # 2. Record each drone's position 10 times over 1 second.
-    samples = [[] for _ in states]
-    for _ in range(10):
-        for i, s in enumerate(states):
-            samples[i].append((s["x"], s["y"], s["z"]))
-        time.sleep(0.1)
-
-    arena = config["arena"][config["mode"]]   # separate limits for sim and real
-
-    for i, points in enumerate(samples):
-        name = f"CF{i + 1}"
-        xs = [p[0] for p in points]
-        ys = [p[1] for p in points]
-        zs = [p[2] for p in points]
-        x, y, z = xs[-1], ys[-1], zs[-1]
-
-        # Steady? The drone is sitting still, so the estimate should barely
-        # move. If it jumps around, Lighthouse is not tracking it properly
-        # and the drone would chase those jumps in flight.
-        spread = max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
-        print(f"{name} on the ground at x={x:.2f} y={y:.2f} z={z:.2f} "
-              f"(jitter {spread * 100:.1f} cm)")
-        if spread > config["preflight_max_spread"]:
-            raise RuntimeError(
-                f"{name}: position jumps by {spread * 100:.0f} cm while sitting "
-                "still. Lighthouse tracking is not reliable. Not flying.")
-
-        # On the floor? z far from 0 means the estimate is wrong.
-        if abs(z) > 0.1:
-            raise RuntimeError(f"{name}: z={z:.2f} m but it is on the floor. "
-                               "Position estimate is not valid. Not flying.")
-
-        # Inside the arena?
-        if not (arena["x_min"] <= x <= arena["x_max"] and
-                arena["y_min"] <= y <= arena["y_max"]):
-            raise RuntimeError(f"{name}: x={x:.2f} y={y:.2f} is outside the arena. Not flying.")
-
-        # Real experiments: is the drone placed on its start spot? Wrong
-        # placement would make the drones' paths cross when they fly to the
-        # start line. (In sim, CrazySim decides where drones spawn.)
-        if config["mode"] == "real" and "start_x" in config:
-            start = config["start_x"][i]
-            if abs(x - start) > 0.3 or abs(y) > 0.3:
-                raise RuntimeError(f"{name}: place it at x={start}, y=0 "
-                                   f"(it is at x={x:.2f}, y={y:.2f}). Not flying.")
+        # Is the position real? A drone on the floor must read z close to 0.
+        if abs(s["z"]) > 0.1:
+            raise RuntimeError(f"{name}: z={s['z']:.2f} m while on the floor — no "
+                               "Lighthouse fix. Run lighthouse_diagnostic. Not flying.")
 
     print("Pre-flight check passed.")
 
 
 def check_in_flight(states, config, min_gap=None):
     """
-    Stop the flight if anything looks unsafe. Call once per control step.
+    Stop the flight (land everything) if a drone's data stops arriving, or,
+    if min_gap is given, if two neighbouring drones get too close.
 
     Input:  states  — list from sensors.start_all() (latest data per drone)
-            config  — uses arena, max_speed, max_data_age
-            min_gap — optional: land if neighbouring drones (in list order,
-                      drone i+1 behind drone i along x) get closer than this (m)
-    Output: none.
-            Raises EmergencyStop (-> motors cut) if a drone is outside the
-            arena or too fast; RuntimeError (-> land) for the other problems.
+            config  — uses max_data_age
+            min_gap — optional: drones are in a line along x (drone i+1
+                      behind drone i); land if any gap is smaller than this (m)
+    Output: none. Raises RuntimeError -> fly_safely() lands every drone.
 
     Called from: watch() below and the experiment control loops.
     """
-    arena = config["arena"][config["mode"]]
     now = time.time()
-
     for i, s in enumerate(states):
-        name = f"CF{i + 1}"
-
-        outside = not (arena["x_min"] <= s["x"] <= arena["x_max"] and
-                       arena["y_min"] <= s["y"] <= arena["y_max"] and
-                       s["z"] <= arena["z_max"])
-        if confirmed((i, "arena"), outside, config):
-            raise EmergencyStop(f"EMERGENCY STOP: {name} outside the arena "
-                                f"(x={s['x']:.2f} y={s['y']:.2f} z={s['z']:.2f})", i)
-
-        # Much faster than any of our manoeuvres -> the drone is flying away.
-        speed = (s["vx"] ** 2 + s["vy"] ** 2 + s["vz"] ** 2) ** 0.5
-        if confirmed((i, "speed"), speed > config["max_speed"], config):
-            raise EmergencyStop(f"EMERGENCY STOP: {name} moving at {speed:.2f} m/s", i)
-
-        # Old data means the radio link is dropping packets. Acting on an
-        # old position is dangerous, so land.
+        # Old data means the radio link is dropping packets: we no longer
+        # know where this drone is, so land everything.
         age = now - s["received_at"]
         if age > config["max_data_age"]:
-            raise RuntimeError(f"ABORT: no fresh data from {name} for {age:.2f} s")
+            raise RuntimeError(f"ABORT: no fresh data from CF{i + 1} for {age:.2f} s")
+
+        # Below the floor = the position estimate is broken (Lighthouse lost).
+        if s["z"] < -0.1:
+            raise RuntimeError(f"ABORT: CF{i + 1} reports z={s['z']:.2f} m (below the "
+                               "floor) — Lighthouse tracking lost")
 
     if min_gap is not None:
         for i in range(len(states) - 1):
@@ -157,40 +102,11 @@ def check_in_flight(states, config, min_gap=None):
                 raise RuntimeError(f"ABORT: CF{i + 1} and CF{i + 2} only {gap:.2f} m apart")
 
 
-# How many checks in a row each problem has been seen, per drone.
-_strikes = {}
-
-
-def confirmed(key, unsafe, config):
-    """
-    Only report a problem once it has been seen several checks IN A ROW.
-
-    A single bad Lighthouse sample (e.g. one base station briefly hidden
-    behind the other drone) makes the position jump for a moment. Cutting
-    the motors for that would drop a healthy drone, so we wait until the
-    problem has lasted `emergency_confirm_steps` checks (3 x 0.1 s = 0.3 s).
-
-    Input:  key    — which drone and which check, e.g. (0, "speed")
-            unsafe — True if the check failed this time
-            config — uses emergency_confirm_steps
-    Output: True when the problem is confirmed.
-
-    Called from: check_in_flight().
-    """
-    _strikes[key] = _strikes.get(key, 0) + 1 if unsafe else 0
-    return _strikes[key] >= config["emergency_confirm_steps"]
-
-
 def watch(states, config, seconds):
     """
-    Wait for `seconds`, checking safety 10 times per second.
+    Wait for `seconds`, checking the radio link 10 times per second.
 
-    Input:  states  — list from sensors.start_all()
-            config  — passed on to check_in_flight()
-            seconds — how long to wait
-    Output: none. Raises (see check_in_flight) as soon as something is unsafe.
-
-    Called from: flight.py during takeoff, and the hover tests.
+    Called from: flight.py during takeoff / moves, the tests and experiments.
     """
     end = time.time() + seconds
     while time.time() < end:

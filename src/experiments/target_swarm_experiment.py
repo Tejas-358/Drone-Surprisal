@@ -95,9 +95,6 @@ def run_mission(drones, config, states, variant, observer, rows):
             dists = pair_distances(true_xy)
             if min(dists.values()) < config["critical_distance"]:
                 raise RuntimeError(f"ABORT: two drones only {min(dists.values()):.2f} m apart")
-            for i, s in enumerate(states):
-                if not config["min_altitude"] <= s["z"] <= config["max_altitude"]:
-                    raise RuntimeError(f"ABORT: CF{i + 1} at z={s['z']:.2f} m")
 
             # --- Controller: what the drones see (noisy copies with --noise)
             seen = [observer.see(s) for s in states]
@@ -129,7 +126,7 @@ def run_mission(drones, config, states, variant, observer, rows):
                       f"F_total={row['F_total']:7.2f}"
                       f"{'  PROTECT' if any(c['protective'] for c in commands) else ''}")
 
-            # Safety checks (arena, fly-away, stale data) during the rest
+            # Safety check (radio link still OK) during the rest
             # of this control period.
             watch(states, config, max(0.0, config["control_period"] - (time.time() - step_start)))
 

@@ -1,0 +1,114 @@
+{
+  "experiment": "goal_navigation",
+  "variant": "adaptive",
+  "mode": "real",
+  "timestamp": "2026-10-28T13:31:44",
+  "git_commit": "86f6f60",
+  "csv": "goal_navigation_adaptive_real_20261028-133144.csv",
+  "n_rows": 298,
+  "scenario": "as_placed",
+  "noise_std": 0.0,
+  "seed": 120623,
+  "aborted": false,
+  "flown_s": 29.972,
+  "metrics": {
+    "start_distance": 0.749,
+    "final_distance": 0.707,
+    "final_error": 0.107,
+    "min_distance": 0.331,
+    "overshoot": 0.269,
+    "settling_time": "",
+    "rms_error": 0.0776,
+    "control_effort": 2.504,
+    "protective_fraction": 0.02
+  },
+  "config": {
+    "mode": "real",
+    "uris": {
+      "sim": [
+        "udp://127.0.0.1:19850",
+        "udp://127.0.0.1:19851",
+        "udp://127.0.0.1:19852"
+      ],
+      "real": [
+        "radio://0/80/2M/E7E7E7E7E7",
+        "radio://0/80/2M/E7E7E7E7E6",
+        "radio://0/80/2M/E7E7E7E7E5"
+      ]
+    },
+    "cache_dir": "./cache",
+    "height": 0.4,
+    "takeoff_time": 5.0,
+    "land_time": 5.0,
+    "log_period_ms": 100,
+    "arena": {
+      "sim": {
+        "x_min": -10.0,
+        "x_max": 10.0,
+        "y_min": -10.0,
+        "y_max": 10.0,
+        "z_max": 2.0
+      },
+      "real": {
+        "x_min": -2.0,
+        "x_max": 2.0,
+        "y_min": -2.0,
+        "y_max": 2.0,
+        "z_max": 1.5
+      }
+    },
+    "max_data_age": 0.5,
+    "max_speed": 1.0,
+    "emergency_confirm_steps": 3,
+    "min_battery_v": 3.7,
+    "preflight_max_spread": 0.05,
+    "log_dir": "data/raw",
+    "start_positions": {
+      "too_far": [
+        [
+          0.4,
+          0.0
+        ],
+        [
+          -0.4,
+          0.0
+        ]
+      ],
+      "too_close": [
+        [
+          0.225,
+          0.0
+        ],
+        [
+          -0.225,
+          0.0
+        ]
+      ]
+    },
+    "transfer_time": 4.0,
+    "desired_distance": 0.6,
+    "distance_tolerance": 0.05,
+    "protective_distance": 0.4,
+    "critical_distance": 0.3,
+    "base_kp": 0.25,
+    "surprise_gain": 1.5,
+    "max_kp": 0.6,
+    "sigma_distance": 0.1,
+    "kd_relative": 0.25,
+    "separation_recovery_gain": 0.5,
+    "goal_offset": [
+      0.5,
+      0.0
+    ],
+    "goal_kp": 0.2,
+    "max_goal_speed": 0.08,
+    "goal_tolerance": 0.08,
+    "max_horizontal_speed": 0.1,
+    "altitude_kp": 0.5,
+    "max_vertical_speed": 0.08,
+    "min_altitude": 0.2,
+    "max_altitude": 0.8,
+    "duration": 30.0,
+    "control_period": 0.1
+  }
+}

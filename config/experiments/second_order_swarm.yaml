@@ -1,0 +1,56 @@
+# ============================================================
+# second_order_swarm.yaml — settings for the three-drone SECOND-ORDER
+# swarm (src/experiments/second_order_swarm_experiment.py, maths in
+# src/controllers/second_order_controller.py, EXPERIMENTS.md §8).
+#
+# Same surprise F as target_swarm (target + neighbours), but every drone
+# ACCELERATES down its gradient, with one damper per spring:
+#   --controller second_order            target + neighbours   (PROPOSED)
+#   --controller goal_only_second_order  target only           (BASELINE)
+# The first-order versions (surprise / goal_only) are run with
+# target_swarm_experiment.py under the same conditions.
+#
+# Loaded on top of config/default.yaml (height, URIs, ...).
+# ============================================================
+
+# --- Start and target (same as target_swarm.yaml) ---------------------
+start_positions: [[-0.9, -0.6], [-0.4, 0.0], [-0.9, 0.6]]   # CF1, CF2, CF3
+target: [0.6, 0.0]
+# --target-distance D instead puts the target D metres in +x from the
+# swarm's start centre (used for the Fitts sweep).
+transfer_time: 4.0
+settle_time: 4.0          # s, hover after the transfer before control starts
+
+# --- Expectations (same as target_swarm.yaml) -------------------------
+desired_distance: 0.60
+sigma_distance: 0.10
+sigma_goal: 0.30
+
+# --- Second-order controller ------------------------------------------
+kappa: 0.0225             # acceleration = -kappa * grad F - damping
+                          # goal:      omega_g = sqrt(kappa)/sigma_goal       = 0.5 rad/s
+                          # neighbour: omega_n = sqrt(2 kappa)/sigma_distance ~ 2.1 rad/s
+                          # damping for both is computed (critical), not set
+kappa_neighbour: 0.01     # softer neighbour spring: omega_n = sqrt(2*0.01)/0.1 ~ 1.4 rad/s
+                          # (with kappa, 2.1 rad/s oscillated on real drones)
+                          # -> triangle settles at ~0.55 m sides instead of 0.58
+damp_on: command          # "command": dampers use the commanded velocity (noise-free)
+                          # "measured": filtered Lighthouse velocity (jittered on real drones)
+max_horizontal_speed: 0.15   # m/s, per drone (velocity command limit)
+rate_filter: 0.3          # low-pass alpha on measured velocities / pair rates
+
+# --- Safety (same as target_swarm.yaml) -------------------------------
+protective_distance: 0.35
+separation_recovery_gain: 1.5
+critical_distance: 0.20
+
+# --- Height hold ------------------------------------------------------
+altitude_kp: 0.50
+max_vertical_speed: 0.08
+
+# --- Metrics ----------------------------------------------------------
+arrival_tolerance: 0.10   # m; Fitts width W = 2 * this
+
+# --- Timing -----------------------------------------------------------
+duration: 40.0
+control_period: 0.1

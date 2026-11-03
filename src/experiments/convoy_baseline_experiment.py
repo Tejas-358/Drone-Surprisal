@@ -107,7 +107,7 @@ def run_convoy(drones, config, states, use_surprise, rows, observer):
             if t >= config["duration"]:
                 break
 
-            # Safety uses the TRUE state: arena, fly-away, stale data, and
+            # Safety (TRUE state): radio link still OK, and
             # (optional) minimum gap.
             check_in_flight(states, config, config.get("min_gap_abort"))
 

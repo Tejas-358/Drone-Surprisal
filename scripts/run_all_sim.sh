@@ -18,7 +18,10 @@
 #                 to mimic real Lighthouse jitter             [0.03]
 #   SEED_BASE     first random seed; run r uses SEED_BASE+r   [100]
 #   N_SWEEP       convoy E1 surprise sensitivities N to test  ["0.05 0.1 0.2 0.4"]
-#   ONLY          goal_navigation | target_swarm | convoy | formation   [all]
+#   GAP_SWEEP     second_order_pair Fitts start gaps (m)     ["0.70 0.80 0.90 1.00"]
+#   TARGET_SWEEP  second_order_swarm Fitts target distances  ["0.4 0.6 0.8 1.2 1.5"]
+#   ONLY          goal_navigation | target_swarm | convoy | formation |
+#                 second_order_pair | second_order_swarm      [all]
 #   plus everything run_experiment.sh uses: CRAZYSIM_DIR, VENV, SIM_STARTUP_WAIT
 #
 # Total time (default): about 40 runs x ~1.5 min (sim start + flight) = ~1 h.
@@ -28,6 +31,8 @@ REPEATS="${REPEATS:-3}"
 NOISE="${NOISE:-0.03}"
 SEED_BASE="${SEED_BASE:-100}"
 N_SWEEP="${N_SWEEP:-0.05 0.1 0.2 0.4}"
+GAP_SWEEP="${GAP_SWEEP:-0.70 0.80 0.90 1.00}"
+TARGET_SWEEP="${TARGET_SWEEP:-0.4 0.6 0.8 1.2 1.5}"
 ONLY="${ONLY:-all}"
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -82,6 +87,33 @@ for r in $(seq 1 "$REPEATS"); do
     if wants formation; then
         run_one 3 formation_distance "${COMMON[@]}"
     fi
+
+    # --- Two drones, second order: 2 controllers x 2 scenarios + Fitts sweep
+    #     (compare with goal_navigation for the first-order baselines)
+    if wants second_order_pair; then
+        for controller in second_order second_order_adaptive; do
+            for scenario in too_far too_close; do
+                run_one 2 second_order_pair --controller "$controller" \
+                        --scenario "$scenario" "${COMMON[@]}"
+            done
+        done
+        for gap in $GAP_SWEEP; do
+            run_one 2 second_order_pair --controller second_order \
+                    --start-gap "$gap" "${COMMON[@]}"
+        done
+    fi
+
+    # --- Three drones, second order: 2 controllers + Fitts sweep
+    #     (compare with target_swarm for the first-order baselines)
+    if wants second_order_swarm; then
+        for controller in goal_only_second_order second_order; do
+            run_one 3 second_order_swarm --controller "$controller" "${COMMON[@]}"
+        done
+        for D in $TARGET_SWEEP; do
+            run_one 3 second_order_swarm --controller second_order \
+                    --target-distance "$D" "${COMMON[@]}"
+        done
+    fi
 done
 
 # --- Analysis of everything collected so far (sim runs)
@@ -97,6 +129,8 @@ python3 -m analysis.plot_goal_navigation_runs --mode sim
 python3 -m analysis.plot_target_swarm_runs --mode sim
 python3 -m analysis.plot_convoy_runs --mode sim
 python3 -m analysis.plot_formation_runs --mode sim
+python3 -m analysis.plot_second_order_pair_runs --mode sim
+python3 -m analysis.plot_second_order_swarm_runs --mode sim
 echo "Figures are in analysis/figures/"
 
 if [ ${#FAILED[@]} -gt 0 ]; then

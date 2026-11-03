@@ -19,6 +19,8 @@ only `--mode sim` / `--mode real` changes.
 | **Convoy E2**: leader–follower train, leader stops at a virtual wall | 3 | `convoy_baseline` | baseline |
 | **Convoy E1**: same, followers slow down when surprised | 3 | `surprise_minimization` | surprise-gated (sweep `noise_scale`) |
 | **Formation E3**: fix a wonky line of drones | 3 | `formation_distance` | — |
+| **Two drones, second order**: same task, acceleration control + Fitts sweep | 2 | `second_order_pair` | `second_order` vs `second_order_adaptive` (+ first-order runs above) |
+| **Three drones, second order**: same task, acceleration control + Fitts sweep | 3 | `second_order_swarm` | `goal_only_second_order` vs `second_order` (+ first-order runs above) |
 
 Sanity checks (not experiments): `test_connection`, `takeoff_test`,
 `three_takeoff_test`, `hover_telemetry_test`, `lighthouse_diagnostic`,
@@ -196,6 +198,8 @@ python -m analysis.plot_goal_navigation_runs --mode sim     # or --mode real
 python -m analysis.plot_target_swarm_runs --mode sim
 python -m analysis.plot_convoy_runs --mode sim
 python -m analysis.plot_formation_runs --mode sim
+python -m analysis.plot_second_order_pair_runs --mode sim
+python -m analysis.plot_second_order_swarm_runs --mode sim
 python -m analysis.plot_surprisal_distance data/raw/<one run>.csv --target 0.6
 ```
 
@@ -206,24 +210,21 @@ What each metric means is listed in EXPERIMENTS.md.
 
 ---
 
-## Safety (built into every flight)
+## Safety (kept simple on purpose)
 
 All flights go through `fly_safely()` (`src/utils/flight.py`):
 
-- **Before arming** (`safety.preflight_check`): Lighthouse deck present, battery
-  ≥ `min_battery_v`, position steady (jitter ≤ 5 cm) and on the floor, inside the
-  arena; for experiments with fixed start spots, each drone on its spot.
-  *(Real drones only for deck/battery/spots — the simulator has none.)*
-- **While flying** (`safety.check_in_flight`, 10× per second): inside the arena,
-  slower than `max_speed`, data fresher than `max_data_age`.
-  A problem must persist 3 checks (0.3 s) before it counts, so one Lighthouse glitch
-  does not drop a drone.
-  - stale data / drones too close → **land all**
-  - a drone outside the arena or flying away → **cut that drone's motors**, land the others
+- **Before arming:** real drones must have a Lighthouse deck. Battery and position
+  of every drone are **printed** (a `LOW` warning below `min_battery_v`) — nothing
+  else can stop the takeoff.
+- **While flying:** if a drone's data stops arriving for `max_data_age` (radio
+  link lost), **all drones land**. Experiments also land if two drones get closer
+  than their `critical_distance`.
 - **Always** (normal end, error, Ctrl-C): land, wait for touchdown, motors off, disarm.
 
-All limits are in `config/default.yaml`. Experiment files must not reuse those
-key names — `load_config()` prints a NOTE if an experiment overrides a default.
+There is **no** speed limit, arena box or jitter check (Lighthouse position jumps
+made them trigger falsely). Keep the cfclient **Emergency stop** within reach, and
+fix tracking problems with `lighthouse_diagnostic` before flying.
 
 ---
 
