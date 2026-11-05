@@ -21,6 +21,8 @@ Run from the repo root:
 
 import argparse
 import csv
+import glob
+import json
 import os
 
 import matplotlib
@@ -52,6 +54,25 @@ def scenario_of(row, target):
     return "too far" if float(row["start_distance"]) > target else "too close"
 
 
+def all_rows():
+    """
+    One summary-style row per run: the rows of the summary CSV, plus runs that
+    are only known from their JSON sidecar (e.g. a batch on another machine
+    whose summary CSV was not merged).
+    """
+    with open(SUMMARY) as f:
+        rows = list(csv.DictReader(f))
+    known = {row["run_file"] for row in rows}
+    for path in sorted(glob.glob("data/raw/goal_navigation_*.json")):
+        with open(path) as f:
+            meta = json.load(f)
+        if meta["csv"] not in known:
+            rows.append({"run_file": meta["csv"], "controller": meta["variant"],
+                         "mode": meta["mode"], "scenario": meta["scenario"],
+                         "aborted": str(meta["aborted"]), **meta["metrics"]})
+    return rows
+
+
 def load_runs(mode, target):
     """
     Return the successful runs as a list of dictionaries:
@@ -59,38 +80,37 @@ def load_runs(mode, target):
      "t": [...], "distance": [...], "surprisal": [...]}
     """
     runs = []
-    with open(SUMMARY) as f:
-        for row in csv.DictReader(f):
-            if row["aborted"] != "False" or row["mode"] != mode:
-                continue   # skip aborted runs and runs from the other mode
-            # A run that STARTED within 10 cm of the target had (almost) no
-            # error to correct, so it says nothing about the controller.
-            if abs(float(row["start_distance"]) - target) < 0.10:
-                print(f"Skipped (started at the target): {row['run_file']}")
-                continue
-            path = os.path.join("data/raw", row["run_file"])
-            if not os.path.exists(path):
-                print(f"Missing run file, skipped: {path}")
-                continue
-            with open(path) as rf:
-                data = list(csv.DictReader(rf))
-            # Lighthouse glitches: the gap cannot really change faster than
-            # 0.2 m/s (each drone moves at most 0.10 m/s). More than a few
-            # "jumps" faster than 0.5 m/s mean the positions were not real.
-            jumps = sum(
-                1 for a, b in zip(data, data[1:])
-                if abs(float(b["distance"]) - float(a["distance"]))
-                / max(float(b["t"]) - float(a["t"]), 1e-3) > 0.5)
-            if jumps > MAX_JUMPS:
-                print(f"Skipped ({jumps} position jumps, Lighthouse tracking): {row['run_file']}")
-                continue
-            runs.append({
-                "summary": row,
-                "scenario": scenario_of(row, target),
-                "t": [float(r["t"]) for r in data],
-                "distance": [float(r["distance"]) for r in data],
-                "surprisal": [float(r["surprisal"]) for r in data],
-            })
+    for row in all_rows():
+        if row["aborted"] != "False" or row["mode"] != mode:
+            continue   # skip aborted runs and runs from the other mode
+        # A run that STARTED within 10 cm of the target had (almost) no
+        # error to correct, so it says nothing about the controller.
+        if abs(float(row["start_distance"]) - target) < 0.10:
+            print(f"Skipped (started at the target): {row['run_file']}")
+            continue
+        path = os.path.join("data/raw", row["run_file"])
+        if not os.path.exists(path):
+            print(f"Missing run file, skipped: {path}")
+            continue
+        with open(path) as rf:
+            data = list(csv.DictReader(rf))
+        # Lighthouse glitches: the gap cannot really change faster than
+        # 0.2 m/s (each drone moves at most 0.10 m/s). More than a few
+        # "jumps" faster than 0.5 m/s mean the positions were not real.
+        jumps = sum(
+            1 for a, b in zip(data, data[1:])
+            if abs(float(b["distance"]) - float(a["distance"]))
+            / max(float(b["t"]) - float(a["t"]), 1e-3) > 0.5)
+        if jumps > MAX_JUMPS:
+            print(f"Skipped ({jumps} position jumps, Lighthouse tracking): {row['run_file']}")
+            continue
+        runs.append({
+            "summary": row,
+            "scenario": scenario_of(row, target),
+            "t": [float(r["t"]) for r in data],
+            "distance": [float(r["distance"]) for r in data],
+            "surprisal": [float(r["surprisal"]) for r in data],
+        })
     return runs
 
 
