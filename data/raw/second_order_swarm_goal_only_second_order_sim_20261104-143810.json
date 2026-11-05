@@ -1,0 +1,89 @@
+{
+  "experiment": "second_order_swarm",
+  "variant": "goal_only_second_order",
+  "mode": "sim",
+  "timestamp": "2026-11-04T14:38:11",
+  "git_commit": "3106f2f",
+  "csv": "second_order_swarm_goal_only_second_order_sim_20261104-143810.csv",
+  "n_rows": 395,
+  "target_distance": null,
+  "noise_std": 0.03,
+  "seed": 101,
+  "aborted": false,
+  "flown_s": 39.953,
+  "metrics": {
+    "arrival_time": 15.87,
+    "final_centre_error": 0.035,
+    "min_pair_distance": 0.308,
+    "final_spacing_error": 0.078,
+    "final_spacing_spread": 0.172,
+    "final_total_surprise": 11.625,
+    "protective_fraction": 0.15,
+    "control_effort": 10.3,
+    "start_centre_error": 1.336,
+    "fitts_id": 2.941,
+    "centre_overshoot": 0.02,
+    "peak_speed": 0.15,
+    "time_to_peak": 0.7,
+    "command_jerk": 0.1776
+  },
+  "config": {
+    "mode": "sim",
+    "uris": {
+      "sim": [
+        "udp://127.0.0.1:19850",
+        "udp://127.0.0.1:19851",
+        "udp://127.0.0.1:19852"
+      ],
+      "real": [
+        "radio://0/80/2M/E7E7E7E7E6",
+        "radio://0/80/2M/E7E7E7E7E7",
+        "radio://0/80/2M/E7E7E7E7E5"
+      ]
+    },
+    "cache_dir": "./cache",
+    "height": 0.4,
+    "takeoff_time": 5.0,
+    "land_time": 5.0,
+    "log_period_ms": 100,
+    "max_data_age": 0.5,
+    "min_battery_v": 3.7,
+    "log_dir": "data/raw",
+    "start_positions": [
+      [
+        -0.9,
+        -0.6
+      ],
+      [
+        -0.4,
+        0.0
+      ],
+      [
+        -0.9,
+        0.6
+      ]
+    ],
+    "target": [
+      0.6,
+      0.0
+    ],
+    "transfer_time": 4.0,
+    "settle_time": 4.0,
+    "desired_distance": 0.6,
+    "sigma_distance": 0.1,
+    "sigma_goal": 0.3,
+    "kappa": 0.0225,
+    "kappa_neighbour": 0.01,
+    "damp_on": "command",
+    "max_horizontal_speed": 0.15,
+    "rate_filter": 0.3,
+    "protective_distance": 0.35,
+    "separation_recovery_gain": 1.5,
+    "critical_distance": 0.2,
+    "altitude_kp": 0.5,
+    "max_vertical_speed": 0.08,
+    "arrival_tolerance": 0.1,
+    "duration": 40.0,
+    "control_period": 0.1
+  }
+}

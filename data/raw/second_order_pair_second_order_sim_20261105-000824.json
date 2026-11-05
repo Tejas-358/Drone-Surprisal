@@ -1,0 +1,104 @@
+{
+  "experiment": "second_order_pair",
+  "variant": "second_order",
+  "mode": "sim",
+  "timestamp": "2026-11-05T00:08:24",
+  "git_commit": "3106f2f",
+  "csv": "second_order_pair_second_order_sim_20261105-000824.csv",
+  "n_rows": 284,
+  "scenario": "too_far",
+  "start_gap": null,
+  "noise_std": 0.03,
+  "seed": 101,
+  "aborted": false,
+  "flown_s": 29.975,
+  "metrics": {
+    "start_distance": 0.798,
+    "start_error": 0.198,
+    "fitts_id": 1.576,
+    "final_distance": 0.585,
+    "final_error": -0.015,
+    "min_distance": 0.563,
+    "overshoot": 0.037,
+    "settling_time": 3.08,
+    "rms_error": 0.0525,
+    "peak_speed": 0.1,
+    "time_to_peak": 0.51,
+    "command_jerk": 0.0821,
+    "control_effort": 1.229,
+    "protective_fraction": 0.0
+  },
+  "config": {
+    "mode": "sim",
+    "uris": {
+      "sim": [
+        "udp://127.0.0.1:19850",
+        "udp://127.0.0.1:19851",
+        "udp://127.0.0.1:19852"
+      ],
+      "real": [
+        "radio://0/80/2M/E7E7E7E7E6",
+        "radio://0/80/2M/E7E7E7E7E7",
+        "radio://0/80/2M/E7E7E7E7E5"
+      ]
+    },
+    "cache_dir": "./cache",
+    "height": 0.4,
+    "takeoff_time": 5.0,
+    "land_time": 5.0,
+    "log_period_ms": 100,
+    "max_data_age": 0.5,
+    "min_battery_v": 3.7,
+    "log_dir": "data/raw",
+    "start_positions": {
+      "too_far": [
+        [
+          0.4,
+          0.0
+        ],
+        [
+          -0.4,
+          0.0
+        ]
+      ],
+      "too_close": [
+        [
+          0.225,
+          0.0
+        ],
+        [
+          -0.225,
+          0.0
+        ]
+      ]
+    },
+    "transfer_time": 4.0,
+    "settle_time": 4.0,
+    "desired_distance": 0.6,
+    "distance_tolerance": 0.05,
+    "protective_distance": 0.4,
+    "critical_distance": 0.3,
+    "separation_recovery_gain": 0.5,
+    "sigma_distance": 0.1,
+    "base_kp": 0.64,
+    "surprise_gain": 1.5,
+    "max_kp": 1.44,
+    "max_gap_rate": 0.2,
+    "rate_filter": 0.3,
+    "goal_offset": [
+      0.5,
+      0.0
+    ],
+    "goal_kp": 0.2,
+    "max_goal_speed": 0.08,
+    "goal_tolerance": 0.08,
+    "max_horizontal_speed": 0.1,
+    "altitude_kp": 0.5,
+    "max_vertical_speed": 0.08,
+    "min_altitude": 0.2,
+    "max_altitude": 0.8,
+    "altitude_abort_steps": 3,
+    "duration": 30.0,
+    "control_period": 0.1
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "experiment": "formation",
+  "variant": "gradient",
+  "mode": "sim",
+  "timestamp": "2026-11-04T14:26:47",
+  "git_commit": "3106f2f",
+  "csv": "formation_gradient_sim_20261104-142647.csv",
+  "n_rows": 50,
+  "noise_std": 0.03,
+  "seed": 101,
+  "aborted": false,
+  "flown_s": 14.739,
+  "metrics": {
+    "convergence_time": 10.23,
+    "final_gap_error": 0.016,
+    "final_U": 0.00053,
+    "min_gap": 0.362
+  },
+  "config": {
+    "mode": "sim",
+    "uris": {
+      "sim": [
+        "udp://127.0.0.1:19850",
+        "udp://127.0.0.1:19851",
+        "udp://127.0.0.1:19852"
+      ],
+      "real": [
+        "radio://0/80/2M/E7E7E7E7E6",
+        "radio://0/80/2M/E7E7E7E7E7",
+        "radio://0/80/2M/E7E7E7E7E5"
+      ]
+    },
+    "cache_dir": "./cache",
+    "height": 0.4,
+    "takeoff_time": 5.0,
+    "land_time": 5.0,
+    "log_period_ms": 100,
+    "max_data_age": 0.5,
+    "min_battery_v": 3.7,
+    "log_dir": "data/raw",
+    "start_x": [
+      0.0,
+      0.3,
+      1.1
+    ],
+    "formation_time": 2.0,
+    "desired_distance": 0.5,
+    "gain": 0.15,
+    "max_step": 0.03,
+    "duration": 15.0,
+    "control_period": 0.3
+  }
+}
