@@ -1,10 +1,11 @@
 """
 summarize_sim_runs.py — the numbers behind document/simulation-results.md.
 
-Reads the JSON + CSV of every finished simulator run and prints tables per
-experiment and condition. By default it uses only runs from the batch that
-started on 2 Nov (--since 20261102): the earlier 28 Oct batch was partial.
-Use --since 0 to include everything and see how much that changes.
+Reads the JSON + CSV of the first simulator batch (code 86f6f60) and prints
+tables per experiment and condition. By default it uses only the runs from
+2 Nov (--since 20261102): the earlier 28 Oct runs were partial. Use --since 0
+to include them and see how much that changes. For the later batch with the
+second-order experiments, see summarize_second_order_sim.py.
 
 It adds one metric the experiments do not save:
   hold_time — first time the gap stays within +-8 cm of the target for 2 s.
@@ -24,6 +25,11 @@ from analysis.load_runs import load_runs
 def stamp(run):
     """The run's start date and time as a number-like string, e.g. 20261102-103345."""
     return run["meta"]["csv"].rsplit(".", 1)[0][-15:]
+
+
+def in_batch(run, since):
+    """True for runs of the first batch (code 86f6f60) from date `since` on."""
+    return run["meta"]["git_commit"] == "86f6f60" and stamp(run) >= since
 
 
 def mean_std(values):
@@ -49,7 +55,7 @@ def hold_time(rows, target, tolerance=0.08, hold=2.0):
 
 def two_drones(since):
     print("\n=== Two drones (goal_navigation) ===")
-    runs = [r for r in load_runs("goal_navigation", "sim") if stamp(r) >= since]
+    runs = [r for r in load_runs("goal_navigation", "sim") if in_batch(r, since)]
     for scenario in ("too_far", "too_close"):
         for controller in ("fixed", "adaptive"):
             group = [r for r in runs if r["meta"]["scenario"] == scenario
@@ -68,7 +74,7 @@ def two_drones(since):
 
 def swarm(since):
     print("\n=== Three drones (target_swarm) ===")
-    runs = [r for r in load_runs("target_swarm", "sim") if stamp(r) >= since]
+    runs = [r for r in load_runs("target_swarm", "sim") if in_batch(r, since)]
     for variant in ("goal_only", "surprise"):
         group = [r for r in runs if r["meta"]["variant"] == variant]
         print(f"\n{variant}: {len(group)} runs, seeds {[r['meta']['seed'] for r in group]}")
@@ -79,7 +85,7 @@ def swarm(since):
 
 def convoy(since):
     print("\n=== Convoy (E2 baseline vs E1 surprise, per N) ===")
-    runs = [r for r in load_runs("convoy", "sim") if stamp(r) >= since]
+    runs = [r for r in load_runs("convoy", "sim") if in_batch(r, since)]
     conditions = [("baseline", None)] + [("surprise", n) for n in (0.05, 0.1, 0.2, 0.4)]
     for variant, n in conditions:
         group = [r for r in runs if r["meta"]["variant"] == variant

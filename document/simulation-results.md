@@ -4,8 +4,9 @@ What the simulator data shows, how far it can be trusted, and what is still
 missing. Numbers come from `data/raw/*_sim_*`. To reproduce them:
 
 ```bash
-python -m analysis.summarize_sim_runs              # 2 Nov batch (used below)
-python -m analysis.summarize_sim_runs --since 0    # all runs, including 28 Oct
+python -m analysis.summarize_second_order_sim      # batch 2: second order, Fitts
+python -m analysis.summarize_sim_runs              # batch 1: 2 Nov runs
+python -m analysis.summarize_sim_runs --since 0    # batch 1: including 28 Oct
 ```
 
 ---
@@ -14,188 +15,213 @@ python -m analysis.summarize_sim_runs --since 0    # all runs, including 28 Oct
 
 | Question | Simulator answer | Confidence |
 |---|---|---|
-| Does neighbour surprise keep a leaderless swarm spaced? | **Yes, consistent with the real drones** | Medium: only one `goal_only` run |
-| Does the adaptive gain correct spacing faster than a fixed gain? | **Yes, in all 6 paired runs**, about 2 s faster | Medium: n = 3 per condition, and see §4 |
-| Does convoy surprise gating reduce bunching after the leader stops? (H1) | **Not shown.** Better in the 2 Nov batch, gone when 28 Oct is included | Low |
-| Is there a useful range of N? (H2) | **Partly.** N = 0.05 clearly freezes the convoy; N ≥ 0.1 does not | Good for the freezing, low for the best N |
-| Is second order faster and smoother? Does it follow Fitts' law? | **No sim data at all** | None |
-| Does the formation controller converge? (H3) | **No sim data at all** | None |
+| 1. Does neighbour surprise keep a leaderless swarm spaced? | **Yes.** Seen in both batches, and it matches the real drones | Medium to good |
+| 2. Is second order better than first order? | **Two drones: yes**, faster and smoother at the same speed limit. **Swarm: smoother yes; faster probably**, but the speed limits differ | Medium |
+| 3. Does second order follow Fitts' law? | **Not shown.** Arrival time grows with distance, but a straight line fits as well as the log law | Low |
+| 4. Does the adaptive gain beat a fixed gain? | **Mixed.** Clearly better when too far; for too close, batch 1 says yes and batch 2 says no | Low to medium |
+| H1. Does convoy gating reduce bunching? | **Not supported** in batch 2, and not robust in batch 1 | Low |
+| H2. Is there a useful range of N? | **N = 0.05 freezes the convoy**, repeated in both batches. N ≥ 0.1 does not | Good |
+| H3. Does the formation controller converge? | **Yes, in the one run we have** | Low (n = 1) |
 
-**The batch was run on old code** (commit `86f6f60`), before the second-order
-experiments existed. See §6 for what to run next.
-
----
-
-## 2. What data we have
-
-41 simulator runs: 40 finished, 1 aborted. Noise std 0.03 (m, m/s) on what the
-controller sees. Runs that stopped early are excluded from all results.
-
-| Experiment | Condition | 2 Nov batch (seeds 101–103) | 28 Oct batch (seed 101 mostly) |
-|---|---|---|---|
-| Two drones | fixed / adaptive × too far / too close | 3 each | 1 each, plus 1 aborted fixed run (seed 102) |
-| Three drones | `surprise` | 2 (seeds 101, 103) | 1 |
-| | `goal_only` | **1** (seed 103) | 0 |
-| Convoy | baseline | 3 | 1 |
-| | surprise, N = 0.05, 0.1, 0.2, 0.4 | 3 each | 1 each |
-| Formation | | **0** | 0 |
-| Second-order pair / swarm, Fitts sweeps | | **0** | 0 |
-
-**Why the 2 Nov batch is used as the main data.** It is the complete repeat set.
-The 28 Oct batch was partial and has unusually large errors, for example a
-convoy gap of 0.43 m and a leader ending 0.5 m short of its stop point. The cause
-is unknown (the batch log was not kept), so this is a choice, not a proven
-fault. §5 shows where it changes the conclusion.
-
-**Limits of these numbers:**
-- Three runs per condition give a rough mean ± std, not statistical significance.
-- Seed 101 was used in both batches, so those runs share a noise seed.
-- Some starts missed their target: fixed seed 101 started 0.89 m (too far) and
-  0.56 m (too close) instead of 0.80 and 0.45. `plot_goal_navigation_runs` skips
-  the 0.56 m run because it started within 10 cm of the target; the tables here
-  keep it.
+**The biggest limitation:** batch 2 ran on an overloaded setup, and 63 of its 81
+planned runs failed. See §2.
 
 ---
 
-## 3. Three drones to a target
+## 2. The data and its quality
 
-Same seed (103), so these two runs are directly comparable.
-
-| Metric | `goal_only` | `surprise` |
+| | Batch 1 | Batch 2 |
 |---|---|---|
-| Arrival time (s) | 19.8 | 28.0 |
-| Final spacing error (m) | 0.243 | 0.014 |
-| Smallest pair distance (m) | 0.28 | 0.39 |
-| Safety push active | 58.8 % of steps | 1.8 % |
-| Final total surprise | 19.1 | 2.8 |
+| Dates | 28 Oct (partial), 2 Nov | 4–5 Nov |
+| Code | `86f6f60` | `3106f2f` |
+| Experiments | two-drone first order, `target_swarm`, convoy | all, including second order and Fitts sweeps |
+| Runs saved | 41 (40 finished) | 67 (46 finished) |
+| Longest gap between control steps (median run) | **0.11 s** | **0.35 s** (worst 1.39 s) |
+| Start layout of `target_swarm` | line along y | staggered, same as real flights |
 
-Without neighbour surprise the drones crowd at the target and only the safety
-push separates them. With it, they form an even triangle and rarely need the
-push. The cost is arrival time: about 40 % slower.
+Noise std is 0.03 (m, m/s) in both.
 
-The second `surprise` run in this batch (seed 101) never met the arrival rule
-(centre within 0.10 m; it ended 0.14 m away), though its spacing error was small
-(0.069 m).
+**Why batch 2 failed so often.** `sim_batch.log` lists **63 of 81** runs of its last
+pass as failed, almost all with `ABORT: no fresh data` after telemetry stalled for
+0.8–1.3 s. Many runs stopped at about 20 s. One run aborted with a position below
+the floor. This is the simulator setup, not a controller problem: the batch ran
+under WSL from `/mnt/d`, and batch 1 had none of these stalls. The exact cause of
+the stalls has not been confirmed.
 
-**Agreement with the real drones**
+**What this means for the numbers:**
+- 28 of the 46 finished runs have no step gap over 0.5 s ("clean"). The rest had a
+  1 s stall during the run. Batch 2 tables use all finished runs; the clean subset
+  gave similar results, but often has n = 1.
+- Aborted runs are excluded, so some conditions have only 1 or 2 runs.
+- Several runs share seed 101 because of repeats, so n does not mean n different
+  seeds.
+- `analysis/figures/*_sim.png` mix both batches and include the stalled runs. Use
+  the tables here for numbers. The Fitts panel of the pair figure uses
+  `settling_time`, not the `hold_time` used here.
 
-| Metric | Sim `goal_only` | Real `goal_only` | Sim `surprise` | Real `surprise` |
+---
+
+## 3. Question 1: neighbour surprise in the swarm
+
+| Metric | Batch 2 `goal_only` (n = 2) | Batch 2 `surprise` (n = 1) | Real `goal_only` (n = 1) | Real `surprise` (n = 1) |
 |---|---|---|---|---|
-| Final spacing error (m) | 0.243 | 0.251 | 0.014 | 0.102 |
-| Safety push active | 59 % | 61 % | 1.8 % | 0 % |
-| Smallest pair distance (m) | 0.28 | 0.22 | 0.39 | 0.42 |
-| Arrival time (s) | 19.8 | 15.5 | 28.0 | 21.2 |
+| Final spacing error (m) | 0.229 | 0.047 | 0.251 | 0.102 |
+| Safety push active | 37 % | 0 % | 61 % | 0 % |
+| Smallest pair distance (m) | 0.265 | 0.496 | 0.224 | 0.418 |
+| Arrival time (s) | 22.2 ± 5.5 | 25.1 | 15.5 | 21.2 |
 
-The pattern matches closely, which is the strongest finding here. Note that
-these sim runs used the older start layout (three drones in a line along y),
-while the real runs used the staggered one, so arrival times differ. Each cell
-is a single run.
+Batch 1 with the same seed (103) agrees: spacing error 0.243 vs 0.014 m, safety push
+59 % vs 1.8 %. With neighbour surprise the drones form an even triangle and do not
+need the push. Without it they crowd, and only the push separates them. This is
+the most reliable result: **it holds across two batches and on real drones.**
 
----
+The cost is arrival time. It was about 35–40 % later on real drones and in batch 1, but
+in batch 2 the difference is within the spread.
 
-## 4. Two drones: fixed vs adaptive gain
-
-`hold_time` = first time the gap stays within ±8 cm of 0.60 m for 2 s. It replaces
-`settling_time`, which noise makes unreliable.
-
-| Scenario | Metric | Fixed | Adaptive |
-|---|---|---|---|
-| Too far | hold time (s) | 5.7 ± 1.3 (one run never held) | **2.9 ± 0.2** |
-| | RMS error (m) | 0.113 ± 0.034 | **0.059 ± 0.009** |
-| | closest distance (m) | 0.596 ± 0.062 | 0.575 ± 0.025 |
-| Too close | hold time (s) | 4.6 ± 0.3 | **2.4 ± 0.5** |
-| | RMS error (m) | 0.069 ± 0.008 | **0.045 ± 0.001** |
-| | closest distance (m) | 0.424 ± 0.029 | 0.449 ± 0.005 |
-
-| Seed | Too far: fixed → adaptive hold (s) | Too close: fixed → adaptive hold (s) |
-|---|---|---|
-| 101 | 6.9 → 3.1 | 5.0 → 1.8 |
-| 102 | never → 2.9 | 4.5 → 2.5 |
-| 103 | 4.4 → 2.6 | 4.3 → 2.9 |
-
-Adaptive won every pair and was less variable. Two cautions:
-- **This shows a stiffer correction helps, not that surprise as such does.** Here
-  surprise depends only on the current error (EXPERIMENTS.md §1). A controller
-  with `kp` computed directly from error size would behave the same.
-- In the 28 Oct batch, one adaptive too-close run was much worse (hold 7.5 s, RMS
-  0.098 m), so adaptive is not always better. Fixed seed 102 (too far) never held
-  the band; the reason has not been investigated.
-
-Real-drone data is too thin to confirm this: one usable `fixed` run per scenario,
-from a different session.
+The second-order swarm shows the same pattern (mean spacing 0.54 m with neighbours,
+0.42 m without). Ignore `final_spacing_error` = 0.078 m for `goal_only_second_order`:
+that run keeps bouncing between about 0.33 and 0.6 m, and the metric reads only the
+last sample.
 
 ---
 
-## 5. Convoy E1 vs E2 and the N sweep
+## 4. Question 2: first order vs second order
 
-60 s runs, target gap 1.0 m. Leader stops at about 32 s. 2 Nov batch, n = 3 each:
+This is the fair comparison the real data lacks: same batch, same noise.
 
-| Condition | Overshoot after stop (m) | Smallest gap (m) | Final gap error (m) | Final CF1–CF2 gap (m) | Speed factor < 0.1 |
+**Two drones** (speed limit 0.10 m/s for all). `hold_time` = first time the gap stays
+within ±8 cm of 0.60 m for 2 s.
+
+| Scenario | Controller | Runs | Hold time (s) | RMS error (m) | Command jerk (m/s²) |
 |---|---|---|---|---|---|
-| E2 baseline | 0.116 ± 0.066 | 0.884 | 0.049 | 1.03 | 0 % |
-| E1, N = 0.05 | 0.000 ± 0.000 | 0.950 | **1.250** | **3.37** | **26 %** |
-| E1, N = 0.1 | 0.084 ± 0.023 | 0.916 | 0.046 | 0.96 | 0.2 % |
-| E1, N = 0.2 | 0.057 ± 0.008 | 0.943 | 0.023 | 1.00 | 0 % |
-| E1, N = 0.4 | 0.084 ± 0.038 | 0.916 | 0.045 | 1.02 | 0 % |
+| Too far | fixed | 3 | 5.0 ± 0.6 | 0.091 | 0.134 |
+| | adaptive | 3 | 2.9 ± 0.8 | 0.055 | 0.183 |
+| | **second order** | 2 | **2.7 ± 0.1** | 0.054 | **0.081** |
+| | second order adaptive | 3 | 2.4 ± 0.4 | 0.049 | 0.104 |
+| Too close | fixed | 2 | 6.2 ± 0.3 | 0.068 | 0.160 |
+| | adaptive | 2 | 6.8 ± 2.1 | 0.065 | 0.188 |
+| | **second order** | 2 | **1.8 ± 0.2** | 0.040 | **0.101** |
+| | second order adaptive | 3 | 1.7 ± 0.3 | 0.039 | 0.115 |
 
-- **N = 0.05 is not a good result, despite zero overshoot.** The followers freeze:
-  CF2 ends over 3 m behind the leader. Noise of 0.03 m/s on each velocity already
-  looks "surprising" at this N. This is the clearest support for H2.
-- **N = 0.2 looks best in this batch**, with about half the baseline's overshoot.
-- **That result is not robust.** Including the 28 Oct runs (n = 4), overshoot is
-  0.185 ± 0.133 m for the baseline and 0.185 ± 0.221 m for N = 0.2, so no benefit
-  remains. One N = 0.2 run reached a gap of 0.43 m. **H1 should be reported as
-  unresolved.**
-- Neither version came near the safety push (`repel_fraction` ≈ 0) in this batch,
-  so this scenario is mild. A faster leader or smaller gap would test H1 harder.
+Second order is about as fast as adaptive when too far and over 3× faster when too
+close, with about 45–55 % less jerk than adaptive. Adding the adaptive gain to second
+order changes little and raises jerk slightly.
 
----
+**Three drones** (default target, same staggered start, about 1.33 m from the target).
 
-## 6. What is missing, and what to run
+| Metric | First-order `surprise` (n = 1) | Second order (n = 3) |
+|---|---|---|
+| Arrival time (s) | 25.1 | **11.8 ± 0.2** |
+| Command jerk (m/s²) | 0.95 | **0.08** |
+| Smallest pair distance (m) | 0.496 | 0.474 ± 0.034 |
+| Final mean spacing (m) | 0.58 | 0.54 |
+| **Speed limit (m/s)** | **0.10** | **0.15** |
 
-| Missing | Needed for |
-|---|---|
-| All second-order runs | Research question 2 |
-| Both Fitts sweeps | Research question 3 (real drones have no sweep data either) |
-| `goal_only` swarm ×2 and a third `surprise` run | Research question 1 |
-| Formation runs | H3 (can be dropped if it stays out of the report) |
-| More convoy repeats, ideally a harder scenario | H1 |
-
-**Before running:** commit and push the latest code, then on the server run
-`git pull`. Check that `git log -1` shows the new commit, and save the log this
-time.
-
-```bash
-ONLY=second_order_pair ./scripts/run_all_sim.sh 2>&1 | tee sim_pair.log
-```
-```bash
-ONLY=second_order_swarm ./scripts/run_all_sim.sh 2>&1 | tee sim_swarm.log
-```
-```bash
-ONLY=target_swarm ./scripts/run_all_sim.sh 2>&1 | tee sim_target.log
-```
-```bash
-ONLY=formation ./scripts/run_all_sim.sh 2>&1 | tee sim_formation.log
-```
-
-The new `target_swarm` runs use the staggered start, so they match the real
-flights better than the runs above. If formation fails again, its log will show
-why.
-
-**Do not compare with real drones:**
-- **Jerk.** The sim noise is independent at every step, so sim jerk (0.14–0.82) is
-  higher than real jerk for that reason alone.
-- **Absolute arrival times**, until start layouts match.
+- **Smoothness is a strong result:** about 12× lower jerk, and the same direction in
+  the baselines (0.46 vs 0.18). A speed limit cannot explain this. It makes sense:
+  first order turns noisy positions directly into velocity, and second order
+  smooths them through acceleration.
+- **Speed: probably faster, but not proven.** It arrived about 2.1× sooner, while the
+  speed limit alone allows up to 1.5×. That leaves roughly 1.4×, from one first-order
+  run. One run at equal speed limits would settle it.
+- **Cost:** spacing ends slightly tighter (0.54 vs 0.58 m), because of the softer
+  neighbour spring.
 
 ---
 
-## 7. Figures
+## 5. Question 3: Fitts' law
 
-| Figure | Shows |
-|---|---|
-| `analysis/figures/target_swarm_runs_sim.png` | Swarm paths, smallest spacing, total surprise |
-| `analysis/figures/goal_navigation_runs_sim.png` | Two-drone distance and surprise over time |
-| `analysis/figures/convoy_runs_sim.png` | Convoy gaps and speed factors |
+Both sweeps were run, but **neither confirms the law**. The fits use W = 0.20 m.
 
-These plot **all** finished runs, including 28 Oct, so they contain the outliers
-discussed in §4 and §5.
+| Sweep | Fit | Equation | R² | n |
+|---|---|---|---|---|
+| Swarm, all distances | log | MT = 0.59 + 3.83 · ID | 0.885 | 9 |
+| | linear | MT = 4.57 + 5.51 · D | **0.929** | 9 |
+| Swarm, D ≤ 0.8 m | log | MT = 4.36 + 1.69 · ID | 0.288 | 4 |
+| | linear | MT = 5.62 + 3.46 · D | 0.334 | 4 |
+| Pair | log | MT = −1.62 + 2.56 · ID | **0.984** | 6 |
+| | linear | MT = −0.15 + 11.79 · D | 0.952 | 6 |
+
+- **Swarm:** beyond D ≈ 0.8 m a straight line fits better. That is what a speed limit
+  produces, so these runs test the limit, not the controller. Below 0.8 m there are
+  too few runs and the fit is poor, and arrival stays at 6–9 s.
+- **Pair:** the log fit is slightly better, but over a narrow range (ID 0.9–2.3), with
+  6 runs, at the 0.10 m/s limit.
+
+To test this properly, raise the limit so the drones never reach it, and use a wider
+range. That is safe in simulation; see §8.
+
+---
+
+## 6. Question 4: adaptive vs fixed gain
+
+| Scenario | Batch 1, hold time (s) | Batch 2, hold time (s) |
+|---|---|---|
+| Too far, fixed → adaptive | 5.7 → 2.9 | 5.0 → 2.9 |
+| Too close, fixed → adaptive | 4.6 → 2.4 | 6.2 → 6.8 |
+
+- **Too far: consistent.** Adaptive is about 2 s faster in both batches.
+- **Too close: inconsistent.** Batch 2 shows no benefit, though with only 2 runs each
+  and stall effects. The earlier "adaptive won all 6 pairs" holds for batch 1 only.
+- Adaptive also raises jerk by about 20–35 %.
+- Any benefit shows that a stiffer correction helps, not surprise as such, because
+  surprise here depends only on the current error (EXPERIMENTS.md §1).
+
+---
+
+## 7. Convoy and formation
+
+Convoy, 60 s runs, target gap 1.0 m. Batch 1 is the 2 Nov runs (n = 3 each). Batch 2
+has n = 1 per condition, except N = 0.05 (n = 2).
+
+| Condition | Batch 1 overshoot (m) | Batch 2 overshoot (m) | Final gap error (m) | Speed factor < 0.1 |
+|---|---|---|---|---|
+| E2 baseline | 0.116 ± 0.066 | 0.087 | 0.05 | 0 % |
+| E1, N = 0.05 | 0.000 | 0.02 | **1.25–1.34** | **23–27 %** |
+| E1, N = 0.1 | 0.084 ± 0.023 | 0.076 | 0.05 | under 1 % |
+| E1, N = 0.2 | 0.057 ± 0.008 | 0.093 | 0.02–0.05 | 0 % |
+| E1, N = 0.4 | 0.084 ± 0.038 | 0.086 | 0.02–0.05 | 0 % |
+
+- **H2:** N = 0.05 is not a good result despite low overshoot. The followers freeze and
+  CF2 ends over 3 m behind, in both batches. Velocity noise of 0.03 m/s already looks
+  "surprising" at this N.
+- **H1:** not supported. The N = 0.2 improvement in the 2 Nov runs disappears with the
+  28 Oct runs (0.185 m for both) and in batch 2 (0.093 vs 0.087 m).
+- The scenario is mild: neither version needed the safety push.
+
+Formation E3 (one finished run, batch 2): gaps converged in 10.2 s, final gap error
+0.016 m, U = 0.0005. This supports H3, but it is one run.
+
+---
+
+## 8. What to run next
+
+**First, fix the stalls.** On the server: copy the repo into the Linux file system
+(for example `~/Drone-Surprisal`, not `/mnt/d`), close other heavy programs, and
+install matplotlib in the venv (6 analysis steps failed without it):
+
+```bash
+pip install -r requirements.txt
+```
+
+Then use one short check before any full batch. Look for no `no fresh data` errors:
+
+```bash
+REPEATS=1 ONLY=target_swarm ./scripts/run_all_sim.sh 2>&1 | tee sim_check.log
+```
+
+**Then, in priority order:**
+
+| Priority | Command | Why |
+|---|---|---|
+| 1 | `N_DRONES=3 ./scripts/run_experiment.sh second_order_swarm --mode sim --controller second_order --set max_horizontal_speed=0.10 --noise 0.03 --seed 101` (seeds 101–103) | Equal speed limit settles question 2 for the swarm |
+| 1 | `ONLY=target_swarm ./scripts/run_all_sim.sh 2>&1 \| tee sim_target.log` | Only one `surprise` run in batch 2 |
+| 2 | `N_DRONES=3 ./scripts/run_experiment.sh second_order_swarm --mode sim --controller second_order --target-distance 0.8 --set max_horizontal_speed=0.40 --noise 0.03 --seed 101` (D = 0.4, 0.6, 0.8, 1.2, 1.5, 2.0, seeds 101–103) | Fitts sweep without the speed limit |
+| 3 | `ONLY=goal_navigation ./scripts/run_all_sim.sh 2>&1 \| tee sim_pair1.log` | Settles the too-close adaptive question |
+| 3 | `ONLY=formation ./scripts/run_all_sim.sh 2>&1 \| tee sim_form.log` | Formation has one run |
+
+**Do not compare with real drones:** jerk (sim noise is independent at every step, so
+sim jerk is higher) or absolute arrival times.
+
+**Metric fixes to make:** use mean spacing over the last 5 s for
+`final_spacing_error`, and `hold_time` in the pair Fitts plot.

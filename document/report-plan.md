@@ -27,13 +27,14 @@ below and must not be used as headline claims.
 | | `goal_only_second_order` | **0** | – | |
 | | Fitts sweep (`--target-distance`) | **0** | – | |
 | Convoy E1/E2, formation E3 (real) | – | none in the current format | – | Old CSVs (12–13 Oct) have no JSON and are not used |
-| CrazySim batch (`run_all_sim.sh`) | old code (`86f6f60`) | 40 | 1 | Two-drone, `target_swarm` and convoy only. **No second-order, Fitts or formation runs.** See `simulation-results.md` |
+| CrazySim batch 1 (`86f6f60`) | two-drone first order, `target_swarm`, convoy | 40 | 1 | Clean runs. See `simulation-results.md` |
+| CrazySim batch 2 (`3106f2f`) | all, with second order and Fitts sweeps | 46 | 21 saved, and the log lists 63 of 81 as failed | Telemetry stalls on the server. n = 1–3 per condition |
 | Point-mass simulation (`surprisal_euler_lagrange_sim`) | fixed vs adaptive | figures in `data/simulation/euler_lagrange/` | – | Good illustration for the method section |
 
 **Bottom line:** we have one or a few real runs per condition. That is enough to
 show the idea works on real drones, but not for a mean ± std comparison. The
 first-order vs second-order swarm comparison is **not like for like yet**, and
-the Fitts' law claim has **no data**, in real flight or in simulation.
+the Fitts' law claim is **not confirmed**: there is no real data, and the simulator sweep cannot separate the log law from a speed limit.
 
 ---
 
@@ -85,10 +86,15 @@ What to say:
 ### Simulator (CrazySim, noise 0.03)
 
 See `simulation-results.md`. What can go in the report:
-- **Swarm, same seed:** `goal_only` spacing error 0.243 m and safety push 59 %, `surprise` 0.014 m and 1.8 %. This matches the real drones (0.251 m, 61 %; 0.102 m, 0 %) and supports research question 1. It rests on one `goal_only` run, so more are needed.
-- **Fixed vs adaptive:** adaptive reached and held the distance about 2 s sooner in all 6 paired runs (too far 5.7 → 2.9 s; too close 4.6 → 2.4 s). This shows a stiffer correction helps, not that surprise as such does.
-- **Convoy:** N = 0.05 freezes the followers (CF2 ends over 3 m behind). The N = 0.2 benefit in the 2 Nov batch disappears when the 28 Oct runs are included, so report H1 as **unresolved**.
+- **Swarm, neighbour surprise:** spacing error 0.05 vs 0.23 m and safety push 0 % vs 37 % (batch 2); same pattern in batch 1 and on real drones. This is the most reliable result.
+- **Two drones, first vs second order (same batch, same speed limit):** second order holds the distance in 2.7 s vs 2.9 s (adaptive) when too far and 1.8 s vs 6.8 s when too close, with about 45–55 % less jerk. n = 2–3.
+- **Swarm, first vs second order (same start, same noise):** jerk 0.08 vs 0.95, a strong result. Arrival 11.8 s vs 25.1 s, but the speed limits still differ (0.15 vs 0.10 m/s), so say "probably faster", and do not quote 2×.
+- **Fixed vs adaptive:** adaptive is about 2 s faster when too far in both batches. When too close, batch 1 favours it and batch 2 does not, so the result is mixed.
+- **Fitts:** not confirmed. Swarm: a straight line fits better (R² 0.93 vs 0.89), which is what a speed limit produces. Pair: log is slightly better (0.98 vs 0.95), over a narrow range.
+- **Convoy:** N = 0.05 freezes the followers in both batches (H2). H1 is **not supported**: no benefit in batch 2.
+- **Formation:** converged in 10.2 s, one run (H3).
 - Do not compare jerk or absolute arrival times between simulator and real drones.
+- Say openly that many batch 2 runs failed from server stalls.
 
 ---
 
@@ -96,7 +102,7 @@ See `simulation-results.md`. What can go in the report:
 
 | Section | Length | Content |
 |---|---|---|
-| Title + abstract | 0.2 p | Surprise minimisation for drone spacing and swarming. Key numbers: safety push 0 % vs 61 %, spacing error 0.10 vs 0.25 m (real), confirmed in simulation. Add first vs second order numbers only after the like-for-like runs |
+| Title + abstract | 0.2 p | Surprise minimisation for drone spacing and swarming. Key numbers: safety push 0 % vs 61 %, spacing error 0.10 vs 0.25 m (real), confirmed in simulation; second order about 12× lower command jerk in simulation |
 | 1. Introduction | 0.4 p | Expectations → surprise → action. Why: decentralised spacing without a leader. Research questions (§3a below) |
 | 2. Method | 1.0 p | Surprise \(S = \tfrac12(e/\sigma)^2\) as Gaussian surprisal. First-order laws (fixed / adaptive gain, gradient descent on \(F\)). Second-order law \(a = -k_p e - k_d \dot e\), \(k_d = 2\sqrt{k_p}\). Swarm version with one damper per spring. Fitts' law \(MT = a + b\log_2(D/W+1)\) and why a critically damped system follows it. Figure 1 |
 | 3. Setup | 0.4 p | Crazyflie 2.x, Lighthouse V2, 10 Hz velocity setpoints, safety rules, scenarios (too far / too close, 3-drone start + target), metrics definitions |
@@ -105,10 +111,10 @@ See `simulation-results.md`. What can go in the report:
 | 6. Conclusion + future work | 0.2 p | Restate the surprise-depends-on-error limitation. Predictive surprise, more drones |
 
 ### 3a. Research questions (use these as the backbone)
-1. Does neighbour surprise keep a leaderless swarm spaced without relying on a safety rule? (goal_only vs surprise; real and sim agree, **needs more `goal_only` runs**)
-2. Does second-order control with matched damping move the drones faster and smoother than first order, without losing spacing? (first vs second order, **needs like-for-like runs**)
-3. Does the second-order controller follow Fitts' law (time grows with log of distance)? (Fitts sweep, **needs data**)
-4. Does a surprise-adaptive gain correct spacing faster than a fixed gain? (fixed vs adaptive; sim says yes, **real needs same-session runs**)
+1. Does neighbour surprise keep a leaderless swarm spaced without relying on a safety rule? (goal_only vs surprise; real and sim agree, supported; more `goal_only` runs would help)
+2. Does second-order control with matched damping move the drones faster and smoother than first order, without losing spacing? (first vs second order; sim supports it for two drones and for swarm smoothness, **swarm speed and all real data need like-for-like runs**)
+3. Does the second-order controller follow Fitts' law (time grows with log of distance)? (Fitts sweep; **sim is inconclusive**, needs a sweep below the speed limit)
+4. Does a surprise-adaptive gain correct spacing faster than a fixed gain? (fixed vs adaptive; **sim is mixed**, real needs same-session runs)
 
 **Fitts range:** peak speed reaches the 0.15 m/s limit at about D = 0.8 m, so only
 D = 0.4, 0.6 and 0.8 m are valid for the fit, and D = 1.2 m is speed-limited. That
@@ -122,7 +128,7 @@ is safe.
 | 1 | Method sketch: left, surprise \(S\) vs error for σ = 0.10; right, critically damped step response and its bell-shaped speed | Make once in matplotlib (5 lines), or reuse `data/simulation/euler_lagrange/distance_comparison.png` | to make |
 | 2 | Two drones: distance vs time, too far and too close, colour = controller | `analysis/figures/second_order_pair_runs_real.png`, top row only (crop) | have, but missing `fixed` and `second_order_adaptive` |
 | 3 | Swarm: (a) paths, (b) smallest pair distance vs time for goal_only / surprise. Add second_order after the like-for-like runs | `analysis/figures/target_swarm_runs_real.png`, `target_swarm_runs_sim.png`; later `second_order_swarm_runs_real.png` | have first order; second order needs re-flying |
-| 4 | Fitts: (a) speed vs time for each target distance, (b) arrival time vs ID with fitted line and R² | bottom row of the swarm figure (and/or pair figure) | **no data** |
+| 4 | Fitts: (a) speed vs time for each target distance, (b) arrival time vs ID with fitted line and R² | bottom row of `second_order_swarm_runs_sim.png` | have sim data, inconclusive; redo after the sweep without the speed limit |
 | T1 | Metrics per controller, mean ± std, real and sim side by side | `plot_second_order_*` tables and `python -m analysis.summarize_sim_runs` | have, n = 1–3 |
 
 Keep figures two columns wide at most, 2 or 3 figures plus 1 table. That fits 4 pages.
@@ -147,17 +153,17 @@ Otherwise first-order and second-order runs cannot start the same way.
 | 3 | 3× each scenario | `python -m src.experiments.surprisal_goal_navigation_experiment --mode real --controller fixed --scenario too_far` (and `too_close`), same session as adaptive | Research question 4 on real drones |
 | 3 | 3× each scenario | `python -m src.experiments.second_order_pair_experiment --mode real --controller second_order_adaptive --scenario too_far --placed` (and `too_close`) | Surprise-adaptive second order never flown |
 
-**Simulator, on the server** (run `git pull` first; check `git log -1`):
+**Simulator, on the server.** Fix the stalls first (`simulation-results.md` §8): move the repo off `/mnt/d`, and install matplotlib. Then:
 
 | Priority | Command | Why |
 |---|---|---|
-| 1 | `ONLY=second_order_swarm ./scripts/run_all_sim.sh 2>&1 \| tee sim_swarm.log` | Second-order swarm and Fitts sweep |
-| 1 | `ONLY=second_order_pair ./scripts/run_all_sim.sh 2>&1 \| tee sim_pair.log` | Second-order pair and Fitts sweep |
-| 1 | `ONLY=target_swarm ./scripts/run_all_sim.sh 2>&1 \| tee sim_target.log` | Only 1 `goal_only` run so far; new runs use the staggered start |
-| 2 | `ONLY=formation ./scripts/run_all_sim.sh 2>&1 \| tee sim_formation.log` | No formation runs exist; drop if it stays out of the report |
+| 1 | `N_DRONES=3 ./scripts/run_experiment.sh second_order_swarm --mode sim --controller second_order --set max_horizontal_speed=0.10 --noise 0.03 --seed 101` (seeds 101–103) | Equal speed limit settles swarm speed |
+| 1 | `ONLY=target_swarm ./scripts/run_all_sim.sh 2>&1 \| tee sim_target.log` | Only 1 `surprise` run in batch 2 |
+| 2 | `N_DRONES=3 ./scripts/run_experiment.sh second_order_swarm --mode sim --controller second_order --target-distance 0.8 --set max_horizontal_speed=0.40 --noise 0.03 --seed 101` (D = 0.4–2.0, seeds 101–103) | Fitts without the speed limit |
+| 3 | `ONLY=goal_navigation ./scripts/run_all_sim.sh 2>&1 \| tee sim_pair1.log` | Settles adaptive when too close |
 
 The convoy can be mentioned in one short paragraph: the N = 0.05 freezing result
-is solid, and H1 is unresolved. There is no real-drone convoy data.
+is solid, and H1 is not supported. There is no real-drone convoy data.
 
 ---
 
@@ -167,7 +173,9 @@ is solid, and H1 is unresolved. There is no real-drone convoy data.
 - [x] Sim figures and `summarize_sim_runs` for the current sim data (two-drone, swarm, convoy). `plot_convoy_runs` and `plot_formation_runs` have no real data, which is fine.
 - [ ] Add `--placed` to `target_swarm_experiment.py`.
 - [ ] Make the two two-drone plots count runs the same way (`as_placed` runs).
-- [ ] Re-run all `--mode sim` scripts after the new batch.
+- [x] `analysis/summarize_second_order_sim.py` for batch 2 (first vs second order, Fitts log and linear fits).
+- [ ] Use mean spacing over the last 5 s for `final_spacing_error`; the last-sample value misleads when drones bounce.
+- [ ] Re-run all `--mode sim` scripts after the next batch.
 - [ ] **Use a better "arrival" metric for the two-drone Fitts plot.** `settling_time` ("never leaves the band again") is ruined by jitter, and "first time in the band" is too noisy: one too-close run passes through the band at 0.2 s during the start wobble. `hold_time` in `analysis/summarize_sim_runs.py` (stays within ±8 cm for 2 s) already does this; move it into `plot_second_order_pair_runs`. The swarm's `arrival_time` (centre within 10 cm) works as it is.
 - [ ] Re-run both `plot_second_order_*` scripts after the new flights. The Fitts panels fill in automatically.
 - [ ] Optional: `python -m analysis.plot_surprisal_distance data/raw/<best second-order pair run>.csv --target 0.6` for a single clean example run.
@@ -182,11 +190,11 @@ is solid, and H1 is unresolved. There is no real-drone convoy data.
 
 | Question | Status | Minimum still needed |
 |---|---|---|
-| 1. Neighbour surprise keeps the swarm spaced | Strongest result; real and sim agree | `goal_only` ×2 more (real), `ONLY=target_swarm` (sim) |
-| 2. Second order vs first order | **Current comparison is not fair** | Like-for-like swarm runs in one session (§4, priority 1) |
-| 3. Fitts' law | **No data** | Sim sweep, plus real sweep at D = 0.4, 0.6, 0.8 |
-| 4. Adaptive vs fixed gain | Sim supports it; real is too thin | Same-session real runs, or report as simulation only |
+| 1. Neighbour surprise keeps the swarm spaced | **Supported**: real and sim agree | `goal_only` ×2 more (real) |
+| 2. Second order vs first order | **Sim supports it**, except swarm speed; real comparison is not fair | Sim at equal speed limit; like-for-like real flights (§4, priority 1) |
+| 3. Fitts' law | **Inconclusive** | Sim sweep below the speed limit; real sweep at D = 0.4, 0.6, 0.8 |
+| 4. Adaptive vs fixed gain | **Mixed** | Repeat sim `goal_navigation`, or report as mixed |
 
-If time is short, do the simulator batch first, because it carries no crash risk,
-then priority 1 real flights. Research question 1 and the simulator results can
-carry the report if the second-order flights do not work out.
+If time is short, do the simulator runs first, because they carry no crash risk,
+then priority 1 real flights. Research question 1 and the simulator's second-order
+results can carry the report if the real second-order flights do not work out.

@@ -39,7 +39,7 @@ and slower when near.
 error; the comparison with the baseline shows the effect of that nonlinearity.
 Showing that *surprise as such* matters needs surprise that depends on more than
 the error — e.g. a prediction error (`d_measured − d_predicted`) or a learned σ.
-That is the planned next step (§10). The second-order experiments (§7, §8)
+That is the planned next step (§11). The second-order experiments (§7, §8)
 change *how* the drones move (smooth acceleration, matched damping), not this
 caveat.
 
@@ -338,22 +338,58 @@ D ≤ 0.8: R² = 0.998; on all D: R² = 0.975.
 
 ---
 
-## 10. Status and next steps
+## 10. Results so far
+
+Full tables, data quality and reproduction commands:
+[document/simulation-results.md](document/simulation-results.md). The report plan is
+[document/report-plan.md](document/report-plan.md).
+
+**Data quality.** Simulator batch 2 (4–5 Nov) had 63 of 81 runs fail in its final
+pass from telemetry stalls on the server, so most conditions have n = 1–3. Real
+flights have n = 1–4 per condition. Treat these as early evidence, not statistics.
+
+| Hypothesis / question | Status | Evidence |
+|---|---|---|
+| H-T: neighbour surprise spaces the swarm (§4) | **Supported** | Spacing error 0.05 vs 0.23 m and safety push 0 % vs 37 % (sim); 0.10 vs 0.25 m and 0 % vs 61 % (real) |
+| Second order vs first order, two drones (§7) | **Supported in sim** | Same speed limit: hold time 1.8 vs 6.8 s (too close), 2.7 vs 2.9 s (too far), about half the jerk. Real comparison not fair yet |
+| Second order vs first order, swarm (§8) | **Smoother: supported in sim. Faster: open** | Jerk 0.08 vs 0.95. Arrival 11.8 vs 25.1 s, but speed limits differ (0.15 vs 0.10 m/s) |
+| Fitts' law (§7, §8) | **Inconclusive** | Swarm: linear fits better (R² 0.93 vs 0.89), as a speed limit would produce. Pair: log slightly better (0.98 vs 0.95) over a narrow range. No real data |
+| H-D: adaptive beats fixed (§3) | **Mixed** | Too far: about 2 s faster in both batches. Too close: better in batch 1, no benefit in batch 2 |
+| H1: gating reduces convoy bunching (§5) | **Not supported** | The N = 0.2 benefit in the 2 Nov runs disappears with the 28 Oct runs and in batch 2 |
+| H2: useful range of N (§5) | **Partly supported** | N = 0.05 freezes the followers in both batches; N ≥ 0.1 does not. No best N shown |
+| H3: formation converges (§6) | **Supported, n = 1** | Converged in 10.2 s, final gap error 0.016 m |
+
+Rules from these results:
+- **Compare controllers only with the same start distance, speed limit and session.**
+  The real first-order and second-order swarm runs break this rule, so "3× faster"
+  must not be claimed.
+- Do not compare jerk or absolute arrival times between simulator and real drones.
+- Use `hold_time` (within ±8 cm for 2 s) rather than `settling_time`.
+
+---
+
+## 11. Status and next steps
 
 - [x] All experiments run through `fly_safely()` with pre-/in-flight safety.
-- [x] Real hardware: sanity tests, two-drone experiment (fixed) confirmed.
+- [x] Real hardware: sanity tests, two-drone fixed and adaptive, target swarm,
+      second-order pair and swarm.
 - [x] Sim-ready: start positions, noise + seeds, CSV + JSON per run, batch script,
       analysis for every experiment.
-- [ ] Sim batch on the server (`scripts/run_all_sim.sh`) and first sim results.
-- [ ] Real runs: two-drone `adaptive`; target swarm; convoy with `convoy_real.yaml`.
+- [x] Sim batches 1 and 2 (`scripts/run_all_sim.sh`), results in §10.
+- [x] Second-order experiments §7 (`second_order_pair`) and §8
+      (`second_order_swarm`): controllers, scripts, configs, Fitts analysis,
+      batch (`ONLY=second_order_pair` / `second_order_swarm`).
+- [ ] Fix the server stalls, then repeat the sim runs with too few repeats.
+- [ ] Sim: second-order swarm at `max_horizontal_speed=0.10`, the equal-limit comparison.
+- [ ] Sim: Fitts sweep below the speed limit (`max_horizontal_speed=0.40`).
+- [ ] Real: like-for-like swarm runs in one session (needs `--placed` in
+      `target_swarm_experiment.py`), and a Fitts sweep at D = 0.4, 0.6, 0.8.
+- [ ] Real: same-session fixed vs adaptive; `second_order_adaptive` never flown.
+- [ ] Use mean spacing over the last 5 s for `final_spacing_error`.
 - [ ] **Predictive surprise** (surprise from prediction error, not error size) as a
       third controller, to show surprise itself — not just a nonlinear gain —
       changes behaviour.
 - [ ] Statistics: paired comparison across seeds, effect sizes.
-- [x] Second-order experiments §7 (`second_order_pair`) and §8
-      (`second_order_swarm`): controllers, scripts, configs, Fitts analysis,
-      batch (`ONLY=second_order_pair` / `second_order_swarm`).
-- [ ] Second-order sim batch, then real runs.
 
 `src/experiments/surprisal_hover_distance_experiment.py` is **not maintained**: its
 "responder" logic can swap roles back and forth. Superseded by the two-drone
